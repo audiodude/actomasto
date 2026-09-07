@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "actomasto"
+version = "0.1.0"
+description = "Evidence-grounded, single-user Mastodon draft collection"
+requires-python = ">=3.12"
+dependencies = ["httpx>=0.28,<0.29", "detect-secrets==1.5.0", "pathspec>=0.12,<1"]
+
+[project.scripts]
+actomasto = "actomasto.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8,<9"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

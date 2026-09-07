@@ -1,0 +1,8 @@
+{"type":"title","v":1,"title":"Sanitized fixture","source":"auto","pad":""}
+{"type":"session","version":3,"id":"sanitized-omp","timestamp":"2026-01-01T00:00:00Z","cwd":"/work/public"}
+{"type":"model_change","id":"model1","parentId":null,"timestamp":"2026-01-01T00:00:00Z","model":"fixture-model"}
+{"type":"message","id":"u1","parentId":"model1","timestamp":"2026-01-01T00:00:00Z","message":{"role":"user","attribution":"user","timestamp":1767225600000,"content":[{"type":"text","text":"Explain the cache change. <system-reminder>INJECTED_CONTEXT</system-reminder>"}]}}
+{"type":"custom_message","id":"injection1","parentId":"u1","timestamp":"2026-01-01T00:00:00.100Z","attribution":"agent","customType":"fixture","content":"INJECTED_CUSTOM","display":true}
+{"type":"message","id":"a1","parentId":"injection1","timestamp":"2026-01-01T00:00:01Z","message":{"role":"assistant","timestamp":1767225601000,"completedAt":1767225601500,"stopReason":"toolUse","content":[{"type":"thinking","thinking":"EXCLUDED_REASONING"},{"type":"text","text":"I am checking cache invalidation."},{"type":"toolCall","id":"tool1","name":"read","arguments":{"path":"ignored"}}]}}
+{"type":"message","id":"tool-result","parentId":"a1","timestamp":"2026-01-01T00:00:02Z","message":{"role":"toolResult","timestamp":1767225602000,"toolCallId":"tool1","toolName":"read","content":[{"type":"text","text":"EXCLUDED_TOOL"}]}}
+{"type":"message","id":"a2","parentId":"tool-result","timestamp":"2026-01-01T00:00:03Z","message":{"role":"assistant","timestamp":1767225603000,"completedAt":1767225603500,"stopReason":"stop","content":[{"type":"text","text":"I fixed cache invalidation."}]}}
