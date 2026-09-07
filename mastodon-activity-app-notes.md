@@ -362,7 +362,7 @@ Use IDs returned by `repos` and `list`, not the illustrative IDs above. `show` o
 
 Control commands close the authorization gate before waiting for existing readers/requests to finish. An already-started synchronous HTTP request can delay acknowledgment until its finite timeout; expiry maintenance continues during this wait. Already-sent content cannot be recalled. Failed usage-unknown attempts remain conservatively charged.
 
-Unknown adapters fail closed independently. Supported observed fingerprints are Claude Code 2.1.260/2.1.263, Codex 0.144.1, and Oh My Pi session schema 3. Explicit Claude/OMP parent branches and identical-session replay are covered. No inspected Codex sample demonstrated a fork-bearing schema: unrecognized lineage metadata pauses that adapter rather than inventing ancestry. No arbitrary future-version compatibility is claimed.
+Unknown adapters fail closed independently. Supported observed fingerprints are Claude Code 2.1.220, 2.1.221, 2.1.223, 2.1.224, 2.1.226–2.1.229, 2.1.231–2.1.233, 2.1.260 and 2.1.263; Codex 0.144.1; and Oh My Pi session schema 3. Unlisted Claude releases are not assumed compatible. Claude's schema-2 checkpoint fingerprint retries previously unsupported streams while retaining deduplication markers. Known history/UI/tool metadata is excluded from evidence. Explicit human provenance remains required, including in background (`sessionKind=bg`) sessions; sidechains, transcript-only messages, interrupted/aborted turns and ambiguous supersession are excluded. Explicit Claude/OMP parent branches and identical-session replay are covered. No inspected Codex sample demonstrated a fork-bearing schema: unrecognized lineage metadata pauses that adapter rather than inventing ancestry. No arbitrary future-version compatibility is claimed.
 
 ### Review decisions and verification
 
@@ -387,6 +387,8 @@ Recorded 2026-09-07:
 - Fixed adapter failure isolation: marking one adapter unhealthy no longer changes the global cancellation epoch. Per-unit adapter health still blocks that source at dispatch and settlement; unrelated sources and in-flight results remain usable.
 - **195 tests passed**, including regressions that reproduced cross-adapter collection cancellation and unrelated-result rejection before the fix.
 - An isolated real CLI/daemon run with an unsupported synthetic Claude record continued through Codex and OMP to generation's authentication gate. Credentials were deliberately absent; no model request was sent. This does not verify live draft generation or add support for older Claude versions.
+- Subsequently added compatibility for all thirteen Claude versions observed in the local archive, including older metadata and exclusion flags, without relaxing human-provenance checks. **203 tests passed**; synthetic collection passed for every supported version, including human-authored background sessions.
+- A local, non-transmitting scan completed all **162 Claude streams** with no adapter errors or quarantines. The scan used no eligible repositories, emitted no source units and persisted no source content. Synthetic fixtures separately verified evidence extraction, exclusions and checkpoint-upgrade deduplication. This does not verify live model generation.
 
 Structured-output API reference:
 https://platform.claude.com/docs/en/build-with-claude/structured-outputs

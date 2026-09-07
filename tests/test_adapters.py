@@ -14,7 +14,7 @@ START = 1767225600.0
 
 
 class Source:
-    def __init__(self, tmp_path, client):
+    def __init__(self, tmp_path, client, fixture=None):
         self.client = client
         self.root = tmp_path / "sessions"
         self.root.mkdir()
@@ -22,7 +22,7 @@ class Source:
         self.repo.mkdir()
         self.path = self.root / "session.jsonl"
         self.records = [json.loads(line.replace("/work/public", str(self.repo)))
-                        for line in (FIXTURES / FILES[client]).read_text().splitlines()]
+                        for line in (FIXTURES / (fixture or FILES[client])).read_text().splitlines()]
         self.cursors = {}
         self.repositories = [{"id": "github.com:1", "paths": [str(self.repo)]}]
         self.write(self.records)
@@ -40,9 +40,9 @@ class Source:
         return next(value for key, value in self.cursors.items() if key.startswith("adapter-stream:"))
 
 
-@pytest.mark.parametrize("client", FILES)
-def test_supported_formats_only_emit_genuine_text_once(tmp_path, client):
-    source = Source(tmp_path, client)
+@pytest.mark.parametrize("client,fixture", [*FILES.items(), ("claude", "claude-2.1.226.jsonl")])
+def test_supported_formats_only_emit_genuine_text_once(tmp_path, client, fixture):
+    source = Source(tmp_path, client, fixture)
     units = source.read()
     assert len(units) == 1
     unit = units[0]
@@ -303,6 +303,55 @@ def test_claude_conflicting_origin_never_becomes_human_via_prompt_source(tmp_pat
     source = Source(tmp_path, "claude")
     source.records[0].update(origin={"kind": "task-notification"}, promptSource="typed")
     source.write(source.records)
+    assert source.read() == []
+
+
+@pytest.mark.parametrize("flags", [
+    {"isVisibleInTranscriptOnly": True},
+    {"isAbortedMidStream": True},
+    {"supersedesUuids": ["a1"]},
+    {"interruptedMessageId": "a1"},
+    {"agentId": "background-agent"},
+])
+def test_claude_legacy_exclusions_do_not_leak_or_block_adjacent_turn(tmp_path, flags):
+    source = Source(tmp_path, "claude", "claude-2.1.226.jsonl")
+    source.records[-1].update(flags)
+    user = copy.deepcopy(source.records[1])
+    user.update(uuid="u2", parentUuid="a2", timestamp="2026-01-01T00:00:04Z")
+    user["message"]["content"] = "Explain the next change."
+    final = copy.deepcopy(source.records[-1])
+    for key in flags:
+        final.pop(key)
+    final.update(uuid="a3", parentUuid="u2", timestamp="2026-01-01T00:00:05Z")
+    source.write(source.records + [user, final])
+    units = source.read()
+    assert [[item["text"] for item in unit["items"]] for unit in units] == [
+        ["Explain the next change.", "I fixed cache invalidation."]]
+
+
+def test_claude_legacy_missing_human_provenance_is_excluded(tmp_path):
+    source = Source(tmp_path, "claude", "claude-2.1.226.jsonl")
+    source.records[1].pop("origin")
+    source.records[1].pop("promptSource")
+    source.write(source.records)
+    assert source.read() == []
+
+
+def test_claude_schema_upgrade_retries_failed_stream_without_replaying_units(tmp_path):
+    source = Source(tmp_path, "claude")
+    first = source.read()[0]
+    for key, value in source.cursors.items():
+        if key.startswith("adapter-stream:"):
+            value.update(version="claude-2.1.260+2.1.263-schema1", error="unsupported_version")
+    user = copy.deepcopy(source.records[0])
+    user.update(version="2.1.226", uuid="u2", parentUuid="a2", timestamp="2026-01-01T00:00:04Z")
+    user["message"]["content"] = "Explain the next change."
+    final = copy.deepcopy(source.records[-1])
+    final.update(version="2.1.226", uuid="a3", parentUuid="u2", timestamp="2026-01-01T00:00:05Z")
+    source.write(source.records + [user, final])
+    units = source.read()
+    assert [unit["items"][0]["text"] for unit in units] == ["Explain the next change."]
+    assert units[0]["id"] != first["id"]
     assert source.read() == []
 
 

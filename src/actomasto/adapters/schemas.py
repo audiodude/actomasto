@@ -1,10 +1,11 @@
 """Metadata-inspected local format contracts, not best-effort future parsers.
 
 Inspection (2026-09-06/07), without exporting message text:
-* Claude Code 2.1.260 / 2.1.263: type,userType,uuid,parentUuid,cwd,
+* Claude Code observed 2.1.220–2.1.233 releases plus 2.1.260 / 2.1.263
+  (exact versions in Claude.versions): type,userType,uuid,parentUuid,cwd,
   sessionId,timestamp,version,message{role,content,stop_reason}; origin.kind
-  human and promptSource typed establish user provenance. isMeta/isSidechain,
-  sourceToolAssistantUUID and task-notification origins are not user input.
+  human and promptSource typed establish user provenance, including sessionKind
+  bg. Sidechains, synthetic/tool messages and ambiguous replacements are excluded.
 * Codex CLI 0.144.1: session_meta.payload{cwd,id,cli_version,source,
   thread_source}; turn_context.payload{cwd,turn_id}; response_item.payload
   {type:message,role,content:[input_text|output_text],phase,
@@ -26,7 +27,7 @@ import math
 import re
 from datetime import datetime
 
-VERSIONS = {"claude": "claude-2.1.260+2.1.263-schema1", "codex": "codex-0.144.1-schema1", "omp": "omp-session3-schema1"}
+VERSIONS = {"claude": "claude-schema2", "codex": "codex-0.144.1-schema1", "omp": "omp-session3-schema1"}
 
 
 class AdapterError(Exception):
@@ -99,9 +100,12 @@ def event(row, context, offset):
 
 class Claude:
     linked = True
-    ignored = {"last-prompt", "mode", "permission-mode", "atis-latch", "attachment", "file-history-snapshot", "ai-title", "queue-operation", "progress", "summary"}
+    versions = {"2.1.220", "2.1.221", "2.1.223", "2.1.224", "2.1.226", "2.1.227",
+                "2.1.228", "2.1.229", "2.1.231", "2.1.232", "2.1.233", "2.1.260", "2.1.263"}
+    ignored = {"last-prompt", "mode", "permission-mode", "atis-latch", "attachment", "file-history-snapshot", "ai-title", "queue-operation", "progress", "summary",
+               "file-history-delta", "pr-link", "cost-state", "agent-name", "frame-link", "bridge-session", "custom-title"}
     blocks = {"thinking", "redacted_thinking", "tool_use", "tool_result", "image", "document", "server_tool_use", "web_search_tool_result"}
-    record_keys = set("apiBlockIndex classifierMetaLines cwd effort entrypoint error gitBranch imagePasteIds isApiErrorMessage isMeta isSidechain message origin parentUuid permissionMode promptId promptSource queueSkipAttachments requestId sessionId session_id sourceToolAssistantUUID timestamp toolUseResult turnCompanion type userType uuid version attributionAgent attributionSkill attributionPlugin attributionMcpServer attributionMcpTool isCompactSummary".split())
+    record_keys = set("apiBlockIndex classifierMetaLines cwd effort entrypoint error gitBranch imagePasteIds isApiErrorMessage isMeta isSidechain message origin parentUuid permissionMode promptId promptSource queueSkipAttachments requestId sessionId session_id sourceToolAssistantUUID timestamp toolUseResult turnCompanion type userType uuid version attributionAgent attributionSkill attributionPlugin attributionMcpServer attributionMcpTool isCompactSummary slug sourceToolUseID mcpMeta toolDenialKind userFeedback sessionKind".split())
     message_keys = set("container content context_management diagnostics id model role stop_details stop_reason stop_sequence type usage".split())
 
     def parse(self, row, context, offset):
@@ -112,7 +116,7 @@ class Claude:
             return event(row, context, offset)
         if kind not in {"user", "assistant", "system"}:
             raise AdapterError("unknown_content_schema")
-        if row.get("version") not in {"2.1.260", "2.1.263"}:
+        if row.get("version") not in self.versions:
             raise AdapterError("unsupported_version")
         required = {"cwd", "uuid", "parentUuid", "sessionId", "isSidechain"}
         if not required <= row.keys():
@@ -120,13 +124,18 @@ class Claude:
         context["session"] = row["sessionId"]
         result = event(row, context, offset)
         result["cwd"] = row["cwd"]
-        if row["isSidechain"] or row.get("isCompactSummary") or row.get("attributionAgent"):
+        # These records cannot safely continue the current human-authored turn.
+        # In particular, supersession is not verified parent-branch lineage.
+        if (row["isSidechain"] or row.get("isCompactSummary") or row.get("attributionAgent")
+                or row.get("agentId") or row.get("isVisibleInTranscriptOnly")
+                or row.get("isAbortedMidStream") or row.get("supersedesUuids") or row.get("interruptedMessageId")):
             result["role"] = "reset"
             return result
         if kind == "system":
-            if row.get("subtype") not in {"away_summary", "local_command", "stop_hook_summary", "turn_duration", "compact_boundary"}:
+            if row.get("subtype") not in {"away_summary", "local_command", "stop_hook_summary", "turn_duration", "compact_boundary",
+                                        "informational", "bridge_status", "model_refusal_fallback"}:
                 raise AdapterError("unknown_content_schema")
-            if row.get("subtype") == "compact_boundary":
+            if row.get("subtype") in {"compact_boundary", "model_refusal_fallback"}:
                 result["role"] = "reset"
             return result
         if set(row) - self.record_keys:
@@ -140,7 +149,7 @@ class Claude:
         if kind == "user":
             origin = row.get("origin")
             human = origin == {"kind": "human"} or (origin is None and row.get("promptSource") == "typed")
-            genuine = human and not (row.get("isMeta") or row.get("sourceToolAssistantUUID") or row.get("toolUseResult") or row.get("promptSource") == "system")
+            genuine = human and not (row.get("isMeta") or row.get("sourceToolAssistantUUID") or row.get("sourceToolUseID") or row.get("toolUseResult") or row.get("promptSource") == "system")
             if genuine:
                 result.update(role="user", text=text)
             elif text and not row.get("isMeta") and not row.get("sourceToolAssistantUUID"):
