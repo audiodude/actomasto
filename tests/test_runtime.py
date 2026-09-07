@@ -97,6 +97,19 @@ def test_successful_collection_continues_to_all_adapters(runtime, monkeypatch):
     assert app.store.status(time.time())['adapters'] == {'claude': True, 'codex': True, 'omp': True}
 
 
+def test_failed_adapter_does_not_cancel_other_sources(runtime, monkeypatch):
+    app, _ = runtime
+    app.store.set_enabled(True, time.time())
+    monkeypatch.setattr(daemon, 'discover', lambda roots: [])
+    def adapters(client, *args, **kwargs):
+        if client == 'claude':
+            raise daemon.AdapterError('unsupported_version')
+        return iter(())
+    monkeypatch.setattr(daemon, 'conversations', adapters)
+    app.collect()
+    assert app.store.status(time.time())['adapters'] == {'claude': False, 'codex': True, 'omp': True}
+
+
 def test_notification_failure_is_visible_without_loop(runtime, monkeypatch):
     app, config = runtime
     config['notifications']['enabled'] = True

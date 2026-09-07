@@ -168,6 +168,21 @@ def test_uncertainty_holds_until_original_expiry_and_adapter_isolation(opened):
     assert not store.pending(NOW + DAY + 100)
 
 
+@pytest.mark.parametrize("failed_adapter", ["claude", "git"])
+def test_adapter_failure_only_fences_its_own_inflight_results(opened, failed_adapter):
+    store, _, _ = opened
+    assert store.enqueue(activity(), NOW)
+    attempt = store.reserve(["one"], 10, MODEL, NOW)
+    store.invalidate_adapter(failed_adapter, False, NOW + 1)
+    store.settle(attempt["id"], {"input_tokens": 10, "output_tokens": 1},
+                 [{"text": "I updated the project.", "evidence_ids": ["one-evidence"]}], NOW + 1)
+    drafts = store.list_suggestions()
+    if failed_adapter == "git":
+        assert drafts == []
+    else:
+        assert [draft["text"] for draft in drafts] == ["I updated the project."]
+
+
 def test_origin_change_in_one_clone_fences_queued_content(opened):
     store, root, config = opened
     enroll(store, root, NOW, [discovered(root), discovered(root, name="second")])

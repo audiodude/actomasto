@@ -382,5 +382,11 @@ Recorded 2026-09-06:
 - Authorized live Haiku requests produced one draft from an unpushed synthetic commit and one from a synthetic conversation-only design discovery, with valid evidence and an empty processed queue. All live attempts, including diagnostic failures, totaled **$0.008310 in usage-based estimated cost**, below the authorized $0.10 ceiling.
 - The live run exposed Markdown-fenced responses despite prompt instructions. Generation now uses Anthropic's supported `output_config.format` JSON schema for both counting and generation, while retaining complete local validation. Invalid responses remain rejected, never stripped or silently repaired.
 
+Recorded 2026-09-07:
+
+- Fixed adapter failure isolation: marking one adapter unhealthy no longer changes the global cancellation epoch. Per-unit adapter health still blocks that source at dispatch and settlement; unrelated sources and in-flight results remain usable.
+- **195 tests passed**, including regressions that reproduced cross-adapter collection cancellation and unrelated-result rejection before the fix.
+- An isolated real CLI/daemon run with an unsupported synthetic Claude record continued through Codex and OMP to generation's authentication gate. Credentials were deliberately absent; no model request was sent. This does not verify live draft generation or add support for older Claude versions.
+
 Structured-output API reference:
 https://platform.claude.com/docs/en/build-with-claude/structured-outputs

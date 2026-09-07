@@ -494,10 +494,8 @@ class Store:
         with self._transaction():
             self.db.execute("INSERT INTO adapters VALUES(?,?) ON CONFLICT(adapter) DO UPDATE SET healthy=excluded.healthy", (adapter, int(healthy)))
             self._event("adapter_" + adapter, "recovered" if healthy else "error", now)
-            if not healthy:
-                settings = self._settings()
-                settings["epoch"] += 1
-                self._save_settings(settings)
+            # Dispatch and settlement check each unit's adapter health. A source
+            # failure must not cancel unrelated collection or generation.
 
     @_locked
     def split(self, unit_id, pieces, now, skipped_item_ids=None):
