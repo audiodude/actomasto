@@ -2,6 +2,7 @@
 from datetime import datetime, timezone
 import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -13,10 +14,14 @@ ORIGIN = "github.com/example/project"
 
 
 def configuration(root, cap="20.00"):
-    return {"version": 1, "discovery": {"roots": [str(root)]},
+    scope = root / "scope.json"
+    if not scope.exists():
+        scope.write_text(json.dumps({"version": 1, "roots": {"claude": [], "codex": [], "omp": []}}))
+    return {"version": 2, "discovery": {"roots": [str(root)]},
             "identity": {"author_emails": ["author@example.invalid"]},
             "blocklist": {"repositories": [], "paths": [], "text": [], "scoped": []},
-            "sources": {}, "generation": {"model": MODEL, "character_limit": 500, "interval_minutes": 30},
+            "funes": {"executable": str(root / "funes"), "corpus": str(root / "corpus"), "scope": str(scope)},
+            "generation": {"model": MODEL, "character_limit": 500, "interval_minutes": 30},
             "budget": {"monthly_usd": cap, "timezone": "UTC"}, "notifications": {"enabled": False}}
 
 
@@ -331,6 +336,7 @@ def test_export_only_public_metadata_and_evidence_opt_in(opened):
                 "message_ids": ["message-one"], "path": "/private/synthetic/session.jsonl"})
     unit["items"][0].update(provenance="assistant_reported", source_ref={"message_ids": ["message-one"],
                 "transcript_path": "/private/synthetic/session.jsonl"})
+    store.invalidate_adapter("claude", True, NOW)
     record = accepted(store, unit)
     assert "evidence" not in store.show(record["id"])
     evidence = store.show(record["id"], evidence=True)["evidence"][0]
@@ -479,7 +485,10 @@ def test_author_removal_discards_reserved_git_without_replaying_history(opened):
 
 def test_source_root_change_discards_only_affected_pending_units(opened):
     store, root, config = opened
-    config["sources"] = {"claude_root": str(root / "old-claude"), "codex_root": str(root / "codex")}
+    scope = Path(config["funes"]["scope"])
+    enrollment = {"version": 1, "roots": {"claude": [str(root / "old-claude")],
+                                        "codex": [str(root / "codex")], "omp": []}}
+    scope.write_text(json.dumps(enrollment))
     store.apply_config(config, NOW)
     git = activity("git")
     claude = {**activity("claude"), "adapter": "claude", "kind": "conversation"}
@@ -487,12 +496,14 @@ def test_source_root_change_discards_only_affected_pending_units(opened):
     for unit in (git, claude, codex):
         assert store.enqueue(unit, NOW)
     original = store.repositories()[0]
-    config["sources"]["claude_root"] = str(root / "new-claude")
+    enrollment["roots"]["claude"] = [str(root / "new-claude")]
+    scope.write_text(json.dumps(enrollment))
     store.apply_config(config, NOW + 1)
     assert {unit["id"] for unit in store.pending(NOW + 1)} == {"git", "codex"}
     assert store.seen(claude)
     assert store.repositories()[0] == original
-    config["sources"]["claude_root"] = str(root / "old-claude")
+    enrollment["roots"]["claude"] = [str(root / "old-claude")]
+    scope.write_text(json.dumps(enrollment))
     store.apply_config(config, NOW + 2)
     assert not store.enqueue(claude, NOW + 2)
 
@@ -514,3 +525,190 @@ def test_source_health_summarizes_streams_without_private_metadata(opened):
         "codex": {"streams": 1, "pending_turns": 0, "quarantined_streams": 0,
                   "errors": ["source_error"]},
     }
+
+
+def test_exact_funes_migration_preserves_lifecycle_and_repairs_config_after_crash(tmp_path, monkeypatch):
+    import hashlib
+    import sqlite3
+    from actomasto import cli
+    from actomasto.config import load, validate
+    from actomasto.funes_source import FunesSource, VERSIONS
+
+    config = configuration(tmp_path)
+    enrollment = {"version": 1, "roots": {client: [str(tmp_path / client)]
+                                         for client in ("claude", "codex", "omp")}}
+    Path(config["funes"]["scope"]).write_text(json.dumps(enrollment))
+    legacy = dict(config, version=1, sources={client + "_root": roots[0]
+                                            for client, roots in enrollment["roots"].items()})
+    del legacy["funes"]
+    config_path = tmp_path / "config"
+    config_path.mkdir()
+    # Author a real v1 TOML file; the v2 writer intentionally cannot write v1.
+    text = ["version = 1"]
+    for section, values in legacy.items():
+        if section == "version":
+            continue
+        text.append(f"[{section}]")
+        text.extend(f"{key} = {json.dumps(value)}" for key, value in values.items())
+    (config_path / "config.toml").write_text("\n".join(text))
+    store = Store(tmp_path / "data")
+    store.apply_config(config, NOW)
+    store.set_enabled(True, NOW)
+    enroll(store, tmp_path)
+
+    def conversation(label):
+        fallback = hashlib.sha256(f"session::1:{label}".encode()).hexdigest()
+        identity = hashlib.sha256(f"claude:session:{fallback}".encode()).hexdigest()
+        unit = activity(identity)
+        unit.update(kind="conversation", adapter="claude", adapter_version="claude-schema2",
+                    source_ref={"client": "claude", "session_id": "session", "message_ids": [fallback]})
+        return unit
+
+    expired = conversation("expired")
+    store.enqueue(expired, NOW)
+    store.expire(NOW + DAY)
+    at = NOW + DAY + 10
+    enroll(store, tmp_path, at)
+    purged = conversation("purged")
+    store.enqueue(purged, at)
+    store.purge(REPO, at)
+    store.invalidate_adapter("claude", True, at)
+    accepted_unit = conversation("accepted")
+    accepted(store, accepted_unit, at)
+    excluded = conversation("excluded")
+    store.mark(excluded, "blocked")
+    pending = conversation("pending")
+    assert store.enqueue(pending, at)
+    git = activity("pending-git")
+    assert store.enqueue(git, at)
+    unseen = conversation("unseen")
+    for unit, reason in ((expired, "expired"), (purged, "purged"),
+                         (accepted_unit, "collected"), (excluded, "blocked"), (pending, "collected")):
+        store.save_cursor("adapter-unit:claude:" + unit["id"], {"reason": reason})
+    store.save_cursor("adapter-stream:claude:legacy", {"offset": 713, "inode": 321,
+                                                      "pending_turns": 1, "quarantine": None})
+    store.set_enabled(False, at + 1)
+    store.set_enabled(True, at + 3)
+    # Freeze the exact pre-upgrade schema/config as an installed v1 database.
+    settings = store.settings()
+    settings["config"] = validate(legacy, legacy=True)
+    settings.pop("funes_scope", None)
+    store._save_settings(settings)
+    store.db.execute("PRAGMA user_version=1")
+    tables = ("intervals", "repositories", "source_cursors", "source_markers", "pending_units",
+              "periods", "attempts", "suggestions", "evidence", "export_outbox", "events",
+              "event_states", "counters")
+    before = {table: [tuple(row) for row in store.db.execute(f"SELECT * FROM {table} ORDER BY rowid")]
+              for table in tables}
+    store.close()
+    with pytest.raises(ValueError, match="migration_required"):
+        Store(tmp_path / "data")
+    monkeypatch.setattr(FunesSource, "capabilities", lambda self: {"protocol": 1, "harnesses": dict(VERSIONS)})
+    real_save = cli.save
+    def interrupted_save(*args):
+        raise OSError("synthetic failure after database commit")
+    monkeypatch.setattr(cli, "save", interrupted_save)
+    paths = {"config": config_path, "data": tmp_path / "data"}
+    with pytest.raises(OSError):
+        cli.migrate_configuration(paths, config["funes"])
+    reopened = Store(tmp_path / "data")
+    try:
+        after = {table: [tuple(row) for row in reopened.db.execute(f"SELECT * FROM {table} ORDER BY rowid")]
+                 for table in tables}
+        assert after == before
+        migrated_settings = reopened.settings()
+        assert {k: v for k, v in migrated_settings.items()
+                if k not in ("config", "funes_scope", "funes_migration")} == {
+                    k: v for k, v in settings.items() if k != "config"}
+        assert migrated_settings["funes_migration"] == "complete"
+        assert all(reopened.seen(unit) for unit in (expired, purged, accepted_unit, excluded, pending))
+        assert not reopened.seen(unseen)
+        assert not reopened.eligible(REPO, at + 2, at + 2)
+        assert reopened.dispatch_allowed([git["id"]], settings["epoch"], at + 4)
+        assert not reopened.dispatch_allowed([pending["id"]], settings["epoch"], at + 4)
+        assert reopened.db.execute("PRAGMA user_version").fetchone()[0] == 2
+    finally:
+        reopened.close()
+    monkeypatch.setattr(cli, "save", real_save)
+    cli.migrate_configuration(paths, config["funes"])
+    assert load(config_path / "config.toml") == validate(config)
+    # The released binary's version gate rejects this database before reading settings.
+    with sqlite3.connect(tmp_path / "data" / "state.sqlite3") as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] > 1
+
+
+def test_failed_migration_keeps_git_usable_without_reopening_conversation_health(tmp_path, monkeypatch):
+    from actomasto.config import ConfigError, migration_config
+    from actomasto.funes_source import FunesSource, SourceError
+
+    config = configuration(tmp_path)
+    roots = {client: [str(tmp_path / client)] for client in ("claude", "codex", "omp")}
+    Path(config["funes"]["scope"]).write_text(json.dumps({"version": 1, "roots": roots}))
+    legacy = dict(config, version=1, sources={client + "_root": values[0]
+                                            for client, values in roots.items()})
+    del legacy["funes"]
+    store = Store(tmp_path / "data")
+    store.apply_config(config, NOW)
+    store.set_enabled(True, NOW)
+    enroll(store, tmp_path)
+    assert store.enqueue(activity(), NOW)
+    settings = store.settings()
+    settings["config"] = legacy
+    store._save_settings(settings)
+    store.db.execute("PRAGMA user_version=1")
+    store.close()
+    store = Store(tmp_path / "data", migrate=True)
+    try:
+        def unavailable(self):
+            raise SourceError("source_unavailable")
+        monkeypatch.setattr(FunesSource, "capabilities", unavailable)
+        with pytest.raises(SourceError):
+            store.migrate_config(migration_config(legacy, config["funes"]))
+        monkeypatch.setattr(FunesSource, "capabilities", lambda self: {"harnesses": {"claude": "future-schema"}})
+        with pytest.raises(SourceError, match="unsupported_harness"):
+            store.migrate_config(migration_config(legacy, config["funes"]))
+        assert store.settings()["funes_migration"] == "pending"
+        assert store.settings()["enabled"]
+        assert store.dispatch_allowed(["one"], settings["epoch"], NOW)
+        assert not any(row[0] for row in store.db.execute(
+            "SELECT healthy FROM adapters WHERE adapter IN ('claude','codex','omp')"))
+        roots["omp"] = []
+        Path(config["funes"]["scope"]).write_text(json.dumps({"version": 1, "roots": roots}))
+        with pytest.raises(ConfigError, match="migration_scope_mismatch"):
+            migration_config(legacy, config["funes"])
+        assert store.settings()["config"] == legacy
+    finally:
+        store.close()
+
+
+def test_completed_migration_retry_cannot_expand_enrollment(opened, monkeypatch):
+    from actomasto.config import ConfigError
+    from actomasto.funes_source import FunesSource, VERSIONS
+    store, root, config = opened
+    settings = store.settings()
+    settings["funes_migration"] = "complete"
+    store._save_settings(settings)
+    pending = {**activity("conversation"), "adapter": "omp", "kind": "conversation"}
+    assert store.enqueue(pending, NOW)
+    before = store.settings()
+    row = tuple(store.db.execute("SELECT * FROM pending_units").fetchone())
+    scope = Path(config["funes"]["scope"])
+    scope.write_text(json.dumps({"version": 1, "roots": {"claude": [], "codex": [], "omp": [str(root / "new")]}}))
+    monkeypatch.setattr(FunesSource, "capabilities", lambda self: {"harnesses": dict(VERSIONS)})
+    with pytest.raises(ConfigError, match="migration_scope_changed"):
+        store.migrate_config(config)
+    assert store.settings() == before
+    assert tuple(store.db.execute("SELECT * FROM pending_units").fetchone()) == row
+
+
+def test_scope_mutation_invalidates_final_dispatch_without_epoch_change(opened):
+    store, root, config = opened
+    pending = {**activity("conversation"), "adapter": "omp", "kind": "conversation"}
+    assert store.enqueue(pending, NOW)
+    store.invalidate_adapter("omp", True, NOW)
+    epoch = store.settings()["epoch"]
+    assert store.dispatch_allowed([pending["id"]], epoch, NOW)
+    Path(config["funes"]["scope"]).write_text(json.dumps({
+        "version": 1, "roots": {"claude": [], "codex": [], "omp": [str(root / "changed")]}}))
+    assert not store.dispatch_allowed([pending["id"]], epoch, NOW)
+    assert store.settings()["epoch"] == epoch

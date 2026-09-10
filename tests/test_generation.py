@@ -21,8 +21,7 @@ def config():
     return {
         "discovery": {"roots": ["/public"]},
         "identity": {"author_emails": ["author@example.org"]},
-        "consent": {"public_source": True, "conversations": True},
-        "sources": {"git": True, "claude": True, "codex": True, "omp": True},
+        "version": 2,
         "generation": {"model": MODEL, "character_limit": 500, "interval_minutes": 30},
         "budget": {"monthly_usd": "20.00", "timezone": "UTC"},
         "blocklist": {"repositories": [], "paths": [], "text": [], "scoped": []},
@@ -50,6 +49,10 @@ def unit(name="one", texts=None):
 def prepared(tmp_path):
     store = Store(tmp_path)
     cfg = config()
+    scope = tmp_path / 'scope.json'
+    scope.write_text(json.dumps({'version': 1, 'roots': {name: [] for name in ('claude', 'codex', 'omp')}}))
+    scope.chmod(0o600)
+    cfg['funes'] = {'executable': '/missing/funes', 'corpus': str(tmp_path / 'corpus'), 'scope': str(scope)}
     store.apply_config(cfg, NOW)
     store.set_enabled(True, NOW)
     store.sync_repositories(

@@ -15,7 +15,7 @@ Milestone 1 includes no publishing, Mastodon credentials, web UI, editing, appro
 - Python 3.12+, managed through uv; no system-Python package installation. Package the `actomasto` CLI with locked dependencies and an absolute executable path in its user-service unit.
 - SQLite is authoritative for configuration revisions, lifecycle, checkpoints, pending context, spending, suggestions, and evidence. Enable foreign keys, WAL, and full synchronous commits. One daemon writer owns a process lock; offline mutating CLI operations acquire the same lock.
 - Versioned JSONL is a derived suggestion export, appended during normal operation and atomically rebuilt after purge or recovery. CLI reads authoritative SQLite, not an export that may lag.
-- Separate modules for discovery/visibility, Git collection, each transcript adapter, policy filtering, queue/generation, persistence/export, and CLI/service integration. No network listener, plugin system, or distributed worker.
+- Separate modules for discovery/visibility, Git collection, the read-only Funes source consumer, policy filtering, queue/generation, persistence/export, and CLI/service integration. Harness normalization is owned by the maintained `audiodude/funes` fork. No network listener, plugin system, or distributed worker.
 - Systemd user service runs while logged in; do not enable lingering. Persist logical on/off independently of process liveness. Logout, crash, and reboot are downtime, not explicit off.
 - A local Unix control socket under `$XDG_RUNTIME_DIR/actomasto/` serializes commands with dispatch. Socket and directory are user-only. No TCP control endpoint.
 - Service remains available for status, control, and expiry maintenance while logically off; it does not inspect source content or make model requests. At login it resumes collection only if enabled.
@@ -37,7 +37,7 @@ Directories mode 0700; files, SQLite sidecars, and export temporaries mode 0600;
 
 ## 3. Configuration and consent
 
-Configuration version 1 has these settings. Unknown keys and invalid values fail validation; a running daemon retains its last valid revision and reports rejection rather than partly applying changes.
+Configuration version 2 has these settings. Unknown keys and invalid values fail validation; a running daemon retains its last valid revision and reports rejection rather than partly applying changes. Version 1 is accepted only by explicit `config migrate`; it is never a parser fallback.
 
 | Setting | Default / contract |
 | --- | --- |
@@ -46,10 +46,10 @@ Configuration version 1 has these settings. Unknown keys and invalid values fail
 | `blocklist.repositories` | Empty list; globs over canonical `host/namespace/project` |
 | `blocklist.paths` | Empty list; globs over repository-relative POSIX paths |
 | `blocklist.text` | Empty list; case-insensitive literal strings |
-| `sources.claude_root` | `~/.claude/projects` |
+| `funes.executable` | Required absolute path to the maintained Funes source-protocol binary |
 | `blocklist.scoped` | Empty list of tables with required `repository` glob and optional `paths`/`text` lists; same matching rules as global lists |
-| `sources.codex_root` | `~/.codex/sessions` |
-| `sources.omp_root` | `~/.omp/agent/sessions` |
+| `funes.corpus` | Required absolute local independent Funes corpus directory; no remote memory |
+| `funes.scope` | Required absolute independent enrollment JSON file; no default harness roots |
 | `generation.model` | `claude-haiku-4-5-20251001` |
 | `generation.character_limit` | 500 Unicode code points; configurable 1–5000 |
 | `generation.interval_minutes` | 30; positive integer |
@@ -60,6 +60,8 @@ Configuration version 1 has these settings. Unknown keys and invalid values fail
 Setup may suggest Git identities from configuration but requires explicit acceptance; do not attribute commits by display name or committer identity. Email matching is trimmed, case-insensitive, and not expanded via mailmap aliases unless the resulting addresses are explicitly configured.
 
 Turning on authorizes automatic enrollment of verified-public repositories under configured roots and hosted processing of both eligible committed content and conversations. The consent screen must state: new repositories are included automatically, each receives a seven-day import, unpushed commits qualify, conversations need not be public, and filtering cannot guarantee confidentiality. Changing roots expands consent only through an explicit configuration apply operation with that scope displayed. Configure blocklists before first enablement.
+
+Funes enrollment is independently managed, versioned JSON with all three `roots.claude`, `roots.codex`, and `roots.omp` arrays. Actomasto does not create, edit, refresh, index, or purge that enrollment or corpus. Off/login/budget gates control Actomasto's source access and hosted processing, not independent indexing. Changing source scope requires explicit apply; it revokes affected pending units without resetting their terminal identities.
 
 There is no blanket ban on client names, internal URLs, issue IDs, or unreleased details within eligible content. User blocklists and mandatory secret filtering replace that earlier policy. No per-repository approval is required.
 
@@ -121,7 +123,7 @@ Metadata-only inspection of local JSONL samples found:
 
 This verifies necessary fields exist, not complete format support. Before accepting each adapter, produce sanitized fixtures for current local versions and prove role/provenance filtering, turn completion, timestamps, branches, truncation/rotation, and project association. Record supported version/schema fingerprints in code. Unknown content-bearing schema pauses only that adapter, sends a failure notification, and leaves other verified sources running. Unknown harmless metadata can be ignored explicitly. All three must pass this gate before milestone 1 is considered delivered; never claim arbitrary future client compatibility.
 
-Read streams incrementally by file identity, byte offset, and stable record IDs. Incomplete trailing JSON waits for completion; malformed complete records quarantine that stream and report an error. Replacement/truncation rescans safely through deduplication. Missing native record IDs use a stable session/branch/index/content digest, not file mtime. Follow explicit branch lineage; do not emit duplicated shared ancestors or synthetic branch summaries.
+Funes independently refreshes a revision-bound metadata inventory. Actomasto enumerates immutable snapshot pages and obtains complete normalized turns through source protocol 1, never ranked search excerpts. Incomplete trailing JSON waits for completion; malformed complete records quarantine that stream and report an error. Replacement/truncation rescans safely through durable unit deduplication. Missing native record IDs retain the legacy session/branch/index/content digest, not file mtime. Explicit branch lineage and excluded/control boundaries remain normalization requirements. Legacy adapter-unit markers remain authoritative; byte offsets and inodes are not converted into enumeration cursors.
 
 ## 6. Blocklists and secret filtering
 
@@ -243,9 +245,10 @@ Required commands:
 
 | Command | Behavior |
 | --- | --- |
-| `actomasto init` | Configure roots, identities, timezone, hosted-processing consent; starts disabled |
+| `actomasto init --root PATH --author-email EMAIL --funes-bin PATH --funes-corpus PATH --funes-scope PATH` | Explicit repository and local-source configuration plus hosted-processing consent; starts disabled |
 | `actomasto config validate` | Validate file without applying or transmitting |
 | `actomasto config apply` | Atomically apply explicit changes and revoke affected pending work |
+| `actomasto config migrate --funes-bin PATH --funes-corpus PATH --funes-scope PATH` | Offline, restart-safe exact v1→v2 continuity migration; no expiry/history reset |
 | `actomasto service install` / `uninstall` | Install/remove user unit only; uninstall preserves data and records off |
 | `actomasto daemon` | Foreground service entry point, singleton lock enforced |
 | `actomasto on` / `off` | Persist logical state with acknowledged collection/dispatch barrier |
@@ -315,14 +318,19 @@ Implement milestone 1 against this specification. If a required adapter cannot m
 
 ### Installation and consent
 
-Requires Linux, Python 3.12+, uv, Git, systemd/logind, and `notify-send` for desktop notifications. Python dependencies are pinned in `uv.lock`; no system-Python installation is needed.
+Requires Linux, Python 3.12+, uv, Git, systemd/logind, and `notify-send` for desktop notifications, plus a reviewed build of the maintained [audiodude/funes](https://github.com/audiodude/funes) fork with local source protocol 1. Python dependencies are pinned in `uv.lock`; no system-Python installation is needed. The Funes installation, independent enrollment, and periodic metadata refresh are operator-managed prerequisites; Actomasto does not install or index personal memories.
 
 ```sh
 uv sync --locked
-uv run actomasto init --root /absolute/path/to/projects --author-email you@example.com
+uv run actomasto init --root /absolute/path/to/projects --author-email you@example.com \
+  --funes-bin /absolute/path/to/funes \
+  --funes-corpus /absolute/path/to/local-corpus \
+  --funes-scope /absolute/path/to/enrollment.json
 uv run actomasto config validate
 uv run actomasto service install
 ```
+
+The v2 CLI/source/migration and foreground-daemon paths were exercised with the actual fork and synthetic originals; [current evidence](verification/funes-integration.json) distinguishes these checks from live installation, which was not performed. Replace example paths with explicitly approved local locations. Source protocol capabilities is a read-only metadata check; it does not enroll or read transcripts. Independently provision a private (0600) enrollment file of the form `{"version":1,"roots":{"claude":["/absolute/claude-root"],"codex":["/absolute/codex-root"],"omp":["/absolute/omp-root"]}}`, with private (0700) parent/corpus directories. Empty arrays enroll no sources for that harness. An independent operator/indexer must issue protocol-1 `refresh` requests at least once per minute; coverage older than five minutes pauses conversations as lagging. Actomasto only invokes `capabilities`, `enumerate`, `turns`, and `read`.
 
 Repeat `--root` and `--author-email` for multiple explicit values. `init` displays hosted-processing consent and requires confirmation; noninteractive use requires `--accept-hosted-processing`. Setup and service installation do not turn collection on. The installed unit contains the absolute CLI executable path, so retain this checkout and its `.venv`, or reinstall the unit after moving them. Installation preserves XDG locations and does not enable lingering.
 
@@ -336,7 +344,21 @@ uv run actomasto config apply
 uv run actomasto on
 ```
 
-`config validate` previews matching repository/path metadata without enrolling repositories or reading matching text. Sensitive filenames are counted rather than displayed. `config apply` displays the proposed root scope and requires confirmation (`--yes` for automation). `on` displays consent again (`--accept-hosted-processing` for automation). Scoped rule syntax:
+`config validate` checks Funes capabilities and previews matching repository/path metadata without enrolling repositories or reading matching text. Sensitive filenames are counted rather than displayed. `config apply` displays the proposed root scope and requires confirmation (`--yes` for automation). `on` displays consent again (`--accept-hosted-processing` for automation).
+
+For an installed v1 database, stop the old service with `systemctl --user stop actomasto.service` (do not use `off` merely for migration; that records a real exclusion interval), then run:
+
+```sh
+uv run actomasto config migrate \
+  --funes-bin /absolute/path/to/funes \
+  --funes-corpus /absolute/path/to/local-corpus \
+  --funes-scope /absolute/path/to/enrollment.json
+systemctl --user start actomasto.service
+```
+
+The scope must contain exactly each expanded, canonical legacy harness root. Missing, additional, unsupported, or unreadable roots/capabilities block continuity migration; no cutoff is substituted. The first explicit migration attempt upgrades the database format to 2 and closes conversation health. If unresolved, the new runtime can continue Git with existing authorization while conversations remain closed. The old binary rejects database version 2. Successful cutover preserves enabled state, off/revoked intervals, enrollment windows, drafts, spending/reservations, terminal markers, adapter-unit cursors, and each pending unit's collection and expiry times. SQLite is authoritative: if interruption occurs before the new TOML file is replaced, rerun the same command to repair it. Do not reinitialize, remove the database, apply an unrelated policy revision, or manually clear checkpoints. The command requires the daemon's exclusive writer lock and does not change logical on/off.
+
+Scoped rule syntax:
 
 ```toml
 [[blocklist.scoped]]
@@ -360,11 +382,15 @@ uv run actomasto service uninstall
 
 Use IDs returned by `repos` and `list`, not the illustrative IDs above. `show` omits evidence unless explicitly requested, including in JSON mode. Purge requires confirmation (`--yes` for automation); `--repo ID` limits it to one repository. Uninstall records off and preserves data. Foreground operation is `uv run actomasto daemon`. Logical on/off and process liveness are separate.
 
+Actomasto purge does not erase original client transcripts, the independent Funes corpus or enrollment, semantic indexes, backups, or provider-held requests. Removing Actomasto's export is not a source purge or a request to reimport.
+
 Control commands close the authorization gate before waiting for existing readers/requests to finish. An already-started synchronous HTTP request can delay acknowledgment until its finite timeout; expiry maintenance continues during this wait. Already-sent content cannot be recalled. Failed usage-unknown attempts remain conservatively charged.
 
 Unknown adapters fail closed independently. Supported observed fingerprints are Claude Code 2.1.220, 2.1.221, 2.1.223, 2.1.224, 2.1.226–2.1.229, 2.1.231–2.1.233, 2.1.260 and 2.1.263; Codex 0.144.1; and Oh My Pi session schema 3. Unlisted Claude releases are not assumed compatible. Claude's schema-2 checkpoint fingerprint retries previously unsupported streams while retaining deduplication markers. Known history/UI/tool metadata is excluded from evidence. Explicit human provenance remains required, including in background (`sessionKind=bg`) sessions; sidechains, transcript-only messages, interrupted/aborted turns and ambiguous supersession are excluded. Explicit Claude/OMP parent branches and identical-session replay are covered. No inspected Codex sample demonstrated a fork-bearing schema: unrecognized lineage metadata pauses that adapter rather than inventing ancestry. No arbitrary future-version compatibility is claimed.
 
 ### Review decisions and verification
+
+The historical results below concern the pre-Funes implementation and do **not** verify the v2 integration. [Current Funes evidence](verification/funes-integration.json) records 210 passing consumer tests, 32 exact legacy-equivalence cases, actual CLI migration/reopen checks, foreground-daemon restart/outage/recovery, and an authorized synthetic Anthropic run costing $0.010623 under a $1 cap. Review fixes recheck enrollment at durable acceptance, dispatch, settlement, and migration retry. No live memory installation, enrollment, deployment, or posting was performed.
 
 The specification review made scoped-rule configuration explicit, separated local-path authorization from shared project identity, required fixture-backed completion/provenance, and conservatively settled crash-interrupted attempts. Independent implementation review additionally caught and corrected dispatch/acknowledgment races, stale collection after policy changes, retry scheduling, transient Git failures becoming terminal, health-event mismatches, and systemd target ordering.
 

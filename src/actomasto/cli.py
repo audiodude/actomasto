@@ -10,7 +10,8 @@ import time
 from pathlib import Path
 
 from .common import control, locations, secure_dir, terminal_safe, timestamp, writer_lock
-from .config import CONSENT, ConfigError, DEFAULTS, load, local_timezone, save, validate
+from .config import CONSENT, ConfigError, load, local_timezone, migration_config, save, scope_fingerprints, scope_roots, validate
+from .funes_source import SourceError
 from .store import Store
 
 
@@ -26,6 +27,11 @@ def parser():
     config.add_parser('validate')
     apply = config.add_parser('apply')
     apply.add_argument('--yes', action='store_true')
+    migrate = config.add_parser('migrate')
+    for command in (init, migrate):
+        command.add_argument('--funes-bin', required=True)
+        command.add_argument('--funes-corpus', required=True)
+        command.add_argument('--funes-scope', required=True)
     service = commands.add_parser('service').add_subparsers(dest='action', required=True)
     service.add_parser('install')
     service.add_parser('uninstall')
@@ -78,6 +84,30 @@ def execute(command, **kwargs):
             store.close()
 
 
+def migrate_configuration(paths, funes):
+    """Offline, restart-safe migration under the same exclusive writer lock."""
+    path = paths['config'] / 'config.toml'
+    with writer_lock(paths['data']):
+        store = Store(paths['data'], migrate=True)
+        try:
+            old = store.settings()['config']
+            if not old:
+                raise ConfigError('migration_requires_existing_configuration')
+            if old.get('version') == 2:
+                candidate = {**old, 'funes': funes}
+            else:
+                # Never silently overwrite unapplied policy or discovery edits.
+                if load(path, legacy=True) != validate(old, legacy=True):
+                    raise ConfigError('migration_configuration_mismatch')
+                candidate = migration_config(old, funes)
+            store.migrate_config(candidate)
+            save(path, candidate)
+        finally:
+            store.close()
+    return {'migrated': True, 'configuration_version': 2, 'database_version': 2,
+            'history_preserved': True, 'pending_expiry_preserved': True}
+
+
 def service(action):
     paths = locations()
     unit_path = paths['systemd'] / 'actomasto.service'
@@ -121,7 +151,11 @@ def main(argv=None):
             if path.exists():
                 raise ConfigError('configuration_already_exists')
             config = validate({'discovery': {'roots': args.root}, 'identity': {'author_emails': args.author_email},
-                               'budget': {'timezone': args.timezone}})
+                               'budget': {'timezone': args.timezone},
+                               'funes': {'executable': args.funes_bin, 'corpus': args.funes_corpus,
+                                         'scope': args.funes_scope}})
+            from .funes_source import FunesSource
+            FunesSource(config['funes']).capabilities()
             confirm(CONSENT, args.accept_hosted_processing)
             with writer_lock(paths['data']):
                 store = Store(paths['data'])
@@ -134,13 +168,22 @@ def main(argv=None):
                     store.close()
             result = {'initialized': True, 'enabled': False}
         elif args.command == 'config':
-            config = load(paths['config'] / 'config.toml')
-            if args.action == 'validate':
-                from .config import preview
-                result = preview(config)
+            if args.action == 'migrate':
+                result = migrate_configuration(paths, {'executable': args.funes_bin,
+                                                       'corpus': args.funes_corpus,
+                                                       'scope': args.funes_scope})
             else:
-                confirm('Apply configuration and hosted-processing scope:\n' + '\n'.join(config['discovery']['roots']) + '\n' + CONSENT, args.yes)
-                result = execute('apply', config=config)
+                config = load(paths['config'] / 'config.toml')
+                if args.action == 'validate':
+                    from .config import preview
+                    result = preview(config)
+                else:
+                    roots = scope_roots(config)
+                    expected_scope = scope_fingerprints(config, roots=roots)
+                    confirm('Apply configuration and hosted-processing scope:\n' + '\n'.join(config['discovery']['roots'])
+                            + '\nFunes enrollment roots: ' + json.dumps(roots, sort_keys=True)
+                            + '\n' + CONSENT, args.yes)
+                    result = execute('apply', config=config, expected_scope=expected_scope)
         elif args.command == 'service':
             result = service(args.action)
         elif args.command == 'on':
@@ -162,13 +205,23 @@ def main(argv=None):
         else:
             preview = execute('list', repo=args.repo, limit=1000000)
             confirm(f'Purge {len(preview)} drafts plus matching pending content; preserve spending and processing history. '
-                    'Original sources, backups and provider-held requests are not erased.', args.yes)
+                    'Original sources, the independent Funes corpus/enrollment, backups and provider-held requests are not erased.', args.yes)
             result = execute('purge', repo=args.repo)
         print(json.dumps(result if getattr(args, 'json', False) else terminal_safe(result), ensure_ascii=False,
                          indent=None if getattr(args, 'json', False) else 2))
         return 0
-    except (ConfigError, ValueError):
-        print(json.dumps({'error': 'invalid_configuration_or_arguments'}), file=sys.stderr)
+    except SourceError as error:
+        print(json.dumps({'error': error.code, 'component': 'funes'}), file=sys.stderr)
+        return 1
+    except (ConfigError, ValueError) as error:
+        migration_errors = {'migration_required', 'migration_scope_mismatch', 'migration_scope_changed',
+                            'migration_configuration_mismatch', 'migration_already_completed',
+                            'migration_requires_existing_configuration'}
+        code = str(error) if str(error) in migration_errors else 'invalid_configuration_or_arguments'
+        result = {'error': code}
+        if code == 'migration_required':
+            result['action'] = 'config migrate --funes-bin ABSOLUTE_BINARY --funes-corpus ABSOLUTE_CORPUS --funes-scope ABSOLUTE_SCOPE'
+        print(json.dumps(result), file=sys.stderr)
         return 2
     except (OSError, RuntimeError, subprocess.SubprocessError):
         print(json.dumps({'error': 'operational_failure'}), file=sys.stderr)

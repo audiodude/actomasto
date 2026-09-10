@@ -38,7 +38,7 @@ def _locked(method):
 
 
 class Store:
-    def __init__(self, data_dir: Path):
+    def __init__(self, data_dir: Path, *, migrate=False):
         self.lock = RLock()
         self.dispatch_lock = RLock()
         self.data_dir = Path(data_dir)
@@ -50,13 +50,13 @@ class Store:
         self.db = sqlite3.connect(self.path, check_same_thread=False, isolation_level=None)
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA foreign_keys=ON")
+        version = self.db.execute("PRAGMA user_version").fetchone()[0]
+        if version > 2 or (version == 1 and not migrate):
+            self.db.close()
+            raise ValueError("migration_required" if version == 1 else "unsupported_database_version")
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=FULL")
         self.db.execute("PRAGMA secure_delete=ON")
-        version = self.db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 1:
-            self.db.close()
-            raise ValueError("unsupported_database_version")
         if version == 0:
             self.db.executescript("""
                 BEGIN IMMEDIATE;
@@ -94,7 +94,7 @@ class Store:
                     created_at REAL NOT NULL, notified INTEGER NOT NULL DEFAULT 0);
                 CREATE TABLE event_states (code TEXT PRIMARY KEY, state TEXT NOT NULL);
                 CREATE TABLE counters (code TEXT PRIMARY KEY, count INTEGER NOT NULL);
-                PRAGMA user_version=1;
+                PRAGMA user_version=2;
             """)
             self.db.execute("INSERT INTO settings VALUES(1,?)", (_json({
                 "enabled": False, "ever_enabled": False, "epoch": 0, "config": {},
@@ -104,6 +104,17 @@ class Store:
                 "export_rebuild": True,
             }),))
             self.db.execute("COMMIT")
+        with self._transaction():
+            if version == 1:
+                settings = self._settings()
+                settings["funes_migration"] = "pending"
+                self._save_settings(settings)
+                self.db.execute("PRAGMA user_version=2")
+            # Persisted compatibility from a prior process is not evidence that
+            # the current source binary can safely dispatch retained context.
+            self.db.executemany("INSERT INTO adapters VALUES(?,0) "
+                                "ON CONFLICT(adapter) DO UPDATE SET healthy=0",
+                                [(client,) for client in ("claude", "codex", "omp")])
         self._permissions()
 
     def _permissions(self):
@@ -199,12 +210,55 @@ class Store:
         return int(Decimal(str(settings["config"].get("budget", {}).get("monthly_usd", "20.00"))) * 1_000_000)
 
     @_locked
-    def apply_config(self, config, now):
+    def migrate_config(self, config):
+        """Cut over only after exact enrollment and metadata capability proof.
+
+        No lifecycle operation runs here: collection time, expiry, reservations,
+        policy revisions, epochs and every terminal identity remain unchanged.
+        SQLite commits before config.toml; repeating the command repairs that
+        derived file after a crash without reapplying or resetting state.
+        """
+        from .config import ConfigError, migration_config, scope_fingerprints, validate
+        from .funes_source import FunesSource, SourceError, VERSIONS
+        config = validate(config)
+        settings = self._settings()
+        old = settings["config"]
+        if old.get("version") == 2:
+            if old != config or settings.get("funes_migration") != "complete":
+                raise ConfigError("migration_already_completed")
+        elif migration_config(old, config["funes"]) != config:
+            raise ConfigError("migration_configuration_mismatch")
+        fingerprint = scope_fingerprints(config)
+        if old.get("version") == 2 and fingerprint != settings.get("funes_scope"):
+            raise ConfigError("migration_scope_changed")
+        capabilities = FunesSource(config["funes"]).capabilities()
+        if capabilities.get("harnesses") != VERSIONS:
+            raise SourceError("unsupported_harness")
+        if scope_fingerprints(config) != fingerprint:
+            raise ConfigError("migration_scope_changed")
+        with self._transaction():
+            settings["config"] = config
+            settings["funes_migration"] = "complete"
+            settings["funes_scope"] = fingerprint
+            self._save_settings(settings)
+            self.db.execute("UPDATE adapters SET healthy=0 WHERE adapter IN ('claude','codex','omp')")
+        return config
+
+    @_locked
+    def apply_config(self, config, now, *, expected_scope=None):
+        from .config import ConfigError, scope_fingerprints
+        if config.get("version") != 2 or self._settings()["config"].get("version") == 1:
+            raise ConfigError("migration_required")
+        new_scope = scope_fingerprints(config)
+        if expected_scope is not None and new_scope != expected_scope:
+            raise ConfigError("scope_changed_during_consent")
         with self._transaction():
             self._clock(now)
             settings = self._settings()
             old_cap = self._cap(settings)
             old_config = settings["config"]
+            old_scope = settings.get("funes_scope", {})
+            settings["funes_scope"] = new_scope
             settings.update(config=config, config_revision=settings["config_revision"] + 1,
                             epoch=settings["epoch"] + 1, generation_paused=False,
                             generation_pause_revision=None, generation_pause_code=None)
@@ -220,9 +274,10 @@ class Store:
             old_authors = {email.strip().casefold() for email in old_config.get("identity", {}).get("author_emails", [])}
             new_authors = {email.strip().casefold() for email in config.get("identity", {}).get("author_emails", [])}
             invalidated_adapters = {"git"} if old_authors - new_authors else set()
-            old_sources, new_sources = old_config.get("sources", {}), config.get("sources", {})
             invalidated_adapters.update(client for client in ("claude", "codex", "omp")
-                                        if old_sources.get(client + "_root") != new_sources.get(client + "_root"))
+                                        if old_scope.get(client) != new_scope.get(client))
+            if old_config.get("funes") != config.get("funes") or old_scope != new_scope:
+                self.db.execute("UPDATE adapters SET healthy=0 WHERE adapter IN ('claude','codex','omp')")
             for repo in self.repositories():
                 paths = [p for p in repo["paths"] if self._in_roots(p, config)]
                 if not paths or policy.repository_blocked(repo["display_path"]):
@@ -569,11 +624,25 @@ class Store:
         settings = self._settings()
         if not unit_ids or not settings["enabled"] or settings["epoch"] != epoch or settings["budget_paused"] or settings["generation_paused"] or settings["clock_uncertain"]:
             return False
+        source_scope = None
         for identity in unit_ids:
             row = self.db.execute("SELECT * FROM pending_units WHERE id=?", (identity,)).fetchone()
             if not row or row["expires_at"] <= now or row["ready_at"] > now:
                 return False
             health = self.db.execute("SELECT healthy FROM adapters WHERE adapter=?", (row["adapter"],)).fetchone()
+            if row["adapter"] in ("claude", "codex", "omp") and (
+                    not health or settings.get("funes_migration") == "pending"
+                    or settings["config"].get("version") != 2):
+                return False
+            if row["adapter"] in ("claude", "codex", "omp"):
+                if source_scope is None:
+                    from .config import ConfigError, scope_fingerprints
+                    try:
+                        source_scope = scope_fingerprints(settings["config"])
+                    except ConfigError:
+                        return False
+                if source_scope.get(row["adapter"]) != settings.get("funes_scope", {}).get(row["adapter"]):
+                    return False
             repo = self.db.execute("SELECT data FROM repositories WHERE id=?", (row["repository_id"],)).fetchone()
             if (health and not health[0]) or not repo:
                 return False
@@ -887,6 +956,7 @@ class Store:
         return {"enabled": settings["enabled"], "epoch": settings["epoch"], "config_revision": settings["config_revision"],
                 "clock_uncertain": settings["clock_uncertain"], "generation_paused": settings["generation_paused"],
                 "generation_pause_code": settings["generation_pause_code"], "queue": queue,
+                "funes_migration": settings.get("funes_migration", "not_required"),
                 "budget_paused": settings["budget_paused"], "budget": {"period": period["id"], "timezone": period["timezone"],
                     "spent_micro_usd": period["spent"], "reserved_micro_usd": period["reserved"], "cap_micro_usd": self._cap(settings),
                     "resume_at": period["end"] if settings["budget_paused"] else None},

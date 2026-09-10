@@ -1,0 +1,398 @@
+{
+  "schema_version": 1,
+  "assistance": "OpenAI Codex",
+  "fork": {
+    "repository": "https://github.com/audiodude/funes",
+    "revision": "69387f12dca29c2c8e939b0d9890e5768cc2067c",
+    "preserved_upstream_main": "72c1081",
+    "pinned_build_sha256": "22b2068b969ac49ad5613955db97dc92f40807260070f62f8e5f366919ff7355"
+  },
+  "environment": {
+    "sandbox": "Ubuntu 24.04 QEMU VM",
+    "rust": "1.98.1",
+    "bun": "1.4.2",
+    "omp": "18.1.15",
+    "source_data": "Authored synthetic fixtures only",
+    "login": "Isolated loginctl shim; real logind integration was not exercised"
+  },
+  "actomasto_tests": {
+    "command": "FUNES_TEST_BIN=/absolute/fork/funes uv run pytest -q",
+    "passed": 210,
+    "failed": 0,
+    "skipped": 0
+  },
+  "legacy_equivalence": [
+    {
+      "harness": "claude",
+      "fixture": "claude-2.1.263.jsonl",
+      "scenario": "complete",
+      "units": 1,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "claude",
+      "fixture": "claude-2.1.263.jsonl",
+      "scenario": "partial",
+      "units": 0,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "claude",
+      "fixture": "claude-2.1.263.jsonl",
+      "scenario": "malformed",
+      "units": 0,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "claude",
+      "fixture": "claude-2.1.263.jsonl",
+      "scenario": "interval",
+      "units": 0,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "claude",
+      "fixture": "claude-2.1.263.jsonl",
+      "scenario": "nested",
+      "units": 0,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "claude",
+      "fixture": "claude-2.1.263.jsonl",
+      "scenario": "blocked_marker",
+      "units": 0,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "claude",
+      "fixture": "claude-2.1.263.jsonl",
+      "scenario": "unknown_provenance",
+      "units": 0,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "claude",
+      "fixture": "claude-2.1.263.jsonl",
+      "scenario": "unicode_injection",
+      "units": 1,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "codex",
+      "fixture": "codex-0.144.1.jsonl",
+      "scenario": "complete",
+      "units": 1,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "codex",
+      "fixture": "codex-0.144.1.jsonl",
+      "scenario": "partial",
+      "units": 0,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "codex",
+      "fixture": "codex-0.144.1.jsonl",
+      "scenario": "malformed",
+      "units": 0,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "codex",
+      "fixture": "codex-0.144.1.jsonl",
+      "scenario": "interval",
+      "units": 0,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "codex",
+      "fixture": "codex-0.144.1.jsonl",
+      "scenario": "nested",
+      "units": 0,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "codex",
+      "fixture": "codex-0.144.1.jsonl",
+      "scenario": "blocked_marker",
+      "units": 0,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "codex",
+      "fixture": "codex-0.144.1.jsonl",
+      "scenario": "unknown_provenance",
+      "units": 0,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "codex",
+      "fixture": "codex-0.144.1.jsonl",
+      "scenario": "unicode_injection",
+      "units": 1,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "omp",
+      "fixture": "omp-session3.jsonl",
+      "scenario": "complete",
+      "units": 1,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "omp",
+      "fixture": "omp-session3.jsonl",
+      "scenario": "partial",
+      "units": 0,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "omp",
+      "fixture": "omp-session3.jsonl",
+      "scenario": "malformed",
+      "units": 0,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "omp",
+      "fixture": "omp-session3.jsonl",
+      "scenario": "interval",
+      "units": 0,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "omp",
+      "fixture": "omp-session3.jsonl",
+      "scenario": "nested",
+      "units": 0,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "omp",
+      "fixture": "omp-session3.jsonl",
+      "scenario": "blocked_marker",
+      "units": 0,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "omp",
+      "fixture": "omp-session3.jsonl",
+      "scenario": "unknown_provenance",
+      "units": 0,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "omp",
+      "fixture": "omp-session3.jsonl",
+      "scenario": "unicode_injection",
+      "units": 1,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "claude",
+      "fixture": "claude-2.1.226.jsonl",
+      "scenario": "complete",
+      "units": 1,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "claude",
+      "fixture": "claude-2.1.226.jsonl",
+      "scenario": "partial",
+      "units": 0,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "claude",
+      "fixture": "claude-2.1.226.jsonl",
+      "scenario": "malformed",
+      "units": 0,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "claude",
+      "fixture": "claude-2.1.226.jsonl",
+      "scenario": "interval",
+      "units": 0,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "claude",
+      "fixture": "claude-2.1.226.jsonl",
+      "scenario": "nested",
+      "units": 0,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "claude",
+      "fixture": "claude-2.1.226.jsonl",
+      "scenario": "blocked_marker",
+      "units": 0,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "claude",
+      "fixture": "claude-2.1.226.jsonl",
+      "scenario": "unknown_provenance",
+      "units": 0,
+      "exact_units_and_markers": true
+    },
+    {
+      "harness": "claude",
+      "fixture": "claude-2.1.226.jsonl",
+      "scenario": "unicode_injection",
+      "units": 1,
+      "exact_units_and_markers": true
+    }
+  ],
+  "migration": {
+    "first": {
+      "migrated": true,
+      "configuration_version": 2,
+      "database_version": 2,
+      "history_preserved": true,
+      "pending_expiry_preserved": true
+    },
+    "repeat": {
+      "migrated": true,
+      "configuration_version": 2,
+      "database_version": 2,
+      "history_preserved": true,
+      "pending_expiry_preserved": true
+    },
+    "exact_tables": [
+      "intervals",
+      "repositories",
+      "source_cursors",
+      "source_markers",
+      "pending_units",
+      "periods",
+      "suggestions",
+      "evidence"
+    ],
+    "pending_expiries_preserved": true,
+    "reopened_between_commands": true,
+    "categories": {
+      "accepted": 3,
+      "excluded": 3,
+      "pending": 3,
+      "unseen": 3
+    },
+    "migration_build": "9f08e59670596e0d2ce46739bf489c3955a0a71a"
+  },
+  "daemon": {
+    "fork_revision": "69387f12dca29c2c8e939b0d9890e5768cc2067c",
+    "initial_inventory_sources": 12,
+    "foreground_cli": true,
+    "graceful_process_restarts": 2,
+    "authorization_epoch_unchanged": true,
+    "git_during_outage": {
+      "commit": "4e813fd364e5a2db29daea45778449034cff8a50",
+      "terminal_reason": "accepted",
+      "conversation_health": {
+        "claude": false,
+        "codex": false,
+        "omp": false
+      }
+    },
+    "recovery": {
+      "old_session_append_and_late_backfill_settled": true,
+      "settled_unit_ids": [
+        "ff085c7cc6b6c070c9a55347716ce540d7f4578ed9e082e031fc46dd4126479f",
+        "2bda968e34bc64820bcb3bca61600745121027fb95e67575eadff881851be7b8"
+      ],
+      "conversation_health": {
+        "claude": true,
+        "codex": true,
+        "omp": true
+      },
+      "pending_units": 0
+    },
+    "cadence_note": "The first outage probe deadline was too short for the five-minute collection scan. Restarted the actual daemon without toggling off, then observed Git settlement and conversation recovery."
+  },
+  "hosted_generation": {
+    "provider": "Anthropic",
+    "model": "claude-haiku-4-5-20251001",
+    "authorized_cap_usd": "1.00",
+    "spent_micro_usd": 10623,
+    "spent_usd": "0.010623",
+    "reserved_micro_usd": 0,
+    "saved_synthetic_drafts": 8,
+    "example": {
+      "character_limit": 500,
+      "created_at": "2026-09-10T02:22:06.105108Z",
+      "generation": {
+        "model": "claude-haiku-4-5-20251001",
+        "policy_revision": 1,
+        "prompt_version": 1
+      },
+      "id": "755fa68f-ff66-42bd-a695-feb58cf615f0",
+      "repository": {
+        "host": "github.com",
+        "id": "github.com:1359662649",
+        "path": "audiodude/actomasto"
+      },
+      "schema_version": 1,
+      "sequence": 5,
+      "text": "Working on cache invalidation logic. Reviewing how cache invalidation is handled in the codebase.",
+      "evidence": [
+        {
+          "excerpt": "I am checking cache invalidation.",
+          "id": "24d2eb15-1fb9-4112-a8f0-511b6094d910",
+          "kind": "conversation",
+          "occurred_at": "2026-09-09T13:19:25.769000Z",
+          "partial_source": false,
+          "provenance": "assistant_reported",
+          "source_ref": {
+            "client": "omp",
+            "message_ids": [
+              "a1"
+            ],
+            "session_id": "synthetic-omp-unseen"
+          }
+        }
+      ]
+    },
+    "export_lag_after_maintenance": 0,
+    "synthetic_only": true,
+    "published_posts": 0,
+    "temporary_credential_removed": true
+  },
+  "boundaries": {
+    "live_memory_enrollment": false,
+    "live_memory_installation": false,
+    "production_deployment": false,
+    "host_service_installation": false,
+    "real_conversations_sent_to_smoke_provider": false
+  },
+  "regression_fixes": [
+    "Scope revocation during filtering cannot persist a turn",
+    "Scope revocation during visibility cannot dispatch to the provider",
+    "Migration retry cannot accept changed enrollment",
+    "Unicode injection framing matches legacy exclusions",
+    "Missing enrollment roots are unavailable rather than empty activity",
+    "Source indexing lag remains visible and retryable",
+    "Original fallback identity inputs are exposed and checked"
+  ],
+  "retained_contract_suites": [
+    "tests/test_funes_source.py",
+    "tests/test_funes_runtime.py",
+    "tests/test_store.py",
+    "tests/test_config_migration.py",
+    "tests/test_generation.py",
+    "tests/test_policy.py",
+    "tests/test_runtime.py",
+    "tests/test_sources.py"
+  ],
+  "bridge_verification": "https://github.com/audiodude/omp-funes-bridge/blob/feat/funes-source/verification/fork-source.json",
+  "fork_tests": {
+    "command": "cargo test --locked --lib --bin funes --test local_source_normalize",
+    "revision": "69387f12dca29c2c8e939b0d9890e5768cc2067c",
+    "library_passed": 272,
+    "cli_passed": 1,
+    "normalization_passed": 15,
+    "failed": 0
+  }
+}

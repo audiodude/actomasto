@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 import tempfile
@@ -13,18 +14,22 @@ from .common import secure_dir
 
 CONSENT = ('Enabling automatically includes newly discovered verified-public repositories under your roots. '
            'Each receives a seven-day import; unpushed commits qualify. Eligible AI conversations need not '
-           'be public. Committed content and conversations are sent to Anthropic. Filtering cannot guarantee '
-           'confidentiality. Configure blocklists before enabling. No posts are published.')
+           'be public. Committed content and conversations are sent to Anthropic. Funes source access is '
+           'local-only; its independent enrollment and indexing are not controlled by Actomasto on/off. '
+           'Filtering cannot guarantee confidentiality. Configure blocklists before enabling. No posts are published.')
 DEFAULTS = {
-    'version': 1,
+    'version': 2,
     'discovery': {'roots': []},
     'identity': {'author_emails': []},
     'blocklist': {'repositories': [], 'paths': [], 'text': [], 'scoped': []},
-    'sources': {'claude_root': '~/.claude/projects', 'codex_root': '~/.codex/sessions', 'omp_root': '~/.omp/agent/sessions'},
+    'funes': {'executable': '', 'corpus': '', 'scope': ''},
     'generation': {'model': 'claude-haiku-4-5-20251001', 'character_limit': 500, 'interval_minutes': 30},
     'budget': {'monthly_usd': '20.00', 'timezone': 'UTC'},
     'notifications': {'enabled': True},
 }
+LEGACY_SOURCES = {'claude_root': '~/.claude/projects', 'codex_root': '~/.codex/sessions',
+                  'omp_root': '~/.omp/agent/sessions'}
+HARNESSES = ('claude', 'codex', 'omp')
 
 
 class ConfigError(ValueError):
@@ -37,18 +42,23 @@ def _strings(value, key, nonempty=False):
     return value
 
 
-def validate(value):
+def validate(value, *, legacy=False):
     if not isinstance(value, dict):
         raise ConfigError('invalid_configuration')
-    result = copy.deepcopy(DEFAULTS)
+    defaults = copy.deepcopy(DEFAULTS)
+    if legacy:
+        defaults['version'] = 1
+        del defaults['funes']
+        defaults['sources'] = LEGACY_SOURCES.copy()
+    result = copy.deepcopy(defaults)
     for section, values in value.items():
-        if section not in DEFAULTS:
+        if section not in defaults:
             raise ConfigError('unknown_configuration_key')
         if section == 'version':
-            if type(values) is not int or values != 1:
+            if type(values) is not int or values != defaults['version']:
                 raise ConfigError('unsupported_configuration_version')
             continue
-        if not isinstance(values, dict) or set(values) - set(DEFAULTS[section]):
+        if not isinstance(values, dict) or set(values) - set(defaults[section]):
             raise ConfigError(f'invalid_{section}_keys')
         result[section].update(values)
     roots = _strings(result['discovery']['roots'], 'roots', True)
@@ -70,9 +80,17 @@ def validate(value):
             raise ConfigError('invalid_scoped_rule')
         for key in ('paths', 'text'):
             _strings(rule.get(key, []), f'scoped_{key}')
-    for root in result['sources'].values():
-        if not isinstance(root, str) or not Path(root).expanduser().is_absolute():
-            raise ConfigError('invalid_source_root')
+    if legacy:
+        for root in result['sources'].values():
+            if not isinstance(root, str) or not Path(root).expanduser().is_absolute():
+                raise ConfigError('invalid_source_root')
+    else:
+        for key, path in result['funes'].items():
+            if (not isinstance(path, str) or not path or '\0' in path
+                    or not Path(path).is_absolute()):
+                raise ConfigError(f'invalid_funes_{key}')
+        if result['funes']['corpus'] == result['funes']['scope']:
+            raise ConfigError('invalid_funes_scope')
     generation = result['generation']
     if not isinstance(generation['model'], str) or not generation['model'].strip():
         raise ConfigError('invalid_model')
@@ -99,10 +117,10 @@ def validate(value):
     return result
 
 
-def load(path):
+def load(path, *, legacy=False):
     try:
         with Path(path).open('rb') as stream:
-            return validate(tomllib.load(stream))
+            return validate(tomllib.load(stream), legacy=legacy)
     except tomllib.TOMLDecodeError:
         raise ConfigError('invalid_toml') from None
 
@@ -119,7 +137,7 @@ def local_timezone():
 
 def save(path, config):
     config = validate(config)
-    lines = ['version = 1', '']
+    lines = ['version = 2', '']
     for section, values in config.items():
         if section == 'version':
             continue
@@ -142,9 +160,55 @@ def save(path, config):
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(name, path)
+        fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
     finally:
         if os.path.exists(name):
             os.unlink(name)
+
+
+def scope_roots(config):
+    """Read enrollment metadata only; never discover or open transcript files."""
+    try:
+        with Path(config['funes']['scope']).open('rb') as stream:
+            raw = stream.read(65537)
+        if len(raw) > 65536:
+            raise ConfigError('invalid_funes_scope')
+        value = json.loads(raw)
+        if (not isinstance(value, dict) or set(value) != {'version', 'roots'}
+                or type(value['version']) is not int or value['version'] != 1
+                or not isinstance(value['roots'], dict) or set(value['roots']) != set(HARNESSES)):
+            raise ConfigError('invalid_funes_scope')
+        roots = {}
+        for client in HARNESSES:
+            values = _strings(value['roots'][client], 'funes_scope')
+            if any(not Path(root).is_absolute() or '\0' in root for root in values):
+                raise ConfigError('invalid_funes_scope')
+            roots[client] = sorted(set(str(Path(root).resolve()) for root in values))
+        return roots
+    except (OSError, ValueError, TypeError, KeyError):
+        raise ConfigError('invalid_funes_scope') from None
+
+
+def scope_fingerprints(config, *, roots=None):
+    return {client: hashlib.sha256(json.dumps(paths, separators=(',', ':')).encode()).hexdigest()
+            for client, paths in (scope_roots(config) if roots is None else roots).items()}
+
+
+def migration_config(legacy, funes):
+    legacy = validate(legacy, legacy=True)
+    candidate = copy.deepcopy(legacy)
+    del candidate['sources']
+    candidate.update(version=2, funes=funes)
+    candidate = validate(candidate)
+    expected = {client: [str(Path(legacy['sources'][client + '_root']).expanduser().resolve())]
+                for client in HARNESSES}
+    if scope_roots(candidate) != expected:
+        raise ConfigError('migration_scope_mismatch')
+    return candidate
 
 
 def preview(config):
@@ -152,6 +216,9 @@ def preview(config):
     from .discovery import discover
     from .git_source import GitSourceError, _git
     from .policy import Policy, sensitive_path
+    from .funes_source import FunesSource
+    scope_roots(config)
+    capabilities = FunesSource(config['funes']).capabilities()
     policy = Policy(config)
     matches = []
     for entry in discover(config['discovery']['roots']):
@@ -178,7 +245,9 @@ def preview(config):
             except GitSourceError:
                 row['reason'] = 'metadata_preview_incomplete'
         matches.append(row)
-    return {'valid': True, 'roots': config['discovery']['roots'], 'matches': matches,
+    return {'valid': True, 'funes': {'protocol': capabilities['protocol'],
+                                   'build_revision': capabilities['build_revision']},
+            'roots': config['discovery']['roots'], 'matches': matches,
             'literal_rule_count': len(config['blocklist']['text']) +
                 sum(len(rule.get('text', [])) for rule in config['blocklist']['scoped']),
             'literal_preview': 'source_content_not_inspected'}
