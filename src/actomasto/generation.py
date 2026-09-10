@@ -114,7 +114,7 @@ def _usage(response):
 
 
 class Generator:
-    def __init__(self, store, config, policy, visibility_check, api_key=None, client=None, clock=None):
+    def __init__(self, store, config, policy, visibility_check, api_key=None, client=None, clock=None, source_check=None):
         self.store = store
         self.config = config
         self.policy = policy
@@ -122,6 +122,7 @@ class Generator:
         self.api_key = api_key if api_key is not None else os.environ.get("ANTHROPIC_API_KEY")
         self.client = client
         self._clock = clock
+        self.source_check = source_check
         self._cancelled = threading.Event()
         self._last_repository = None
 
@@ -157,6 +158,8 @@ class Generator:
             self.store.event("visibility_uncertain", now=self._now())
             raise _Stopped() from None
         if not public:
+            raise _Stopped()
+        if self.source_check is not None and not self.source_check(units):
             raise _Stopped()
         with self.store.lock:
             now = self._now()
@@ -354,6 +357,9 @@ class Generator:
                 raise
             usage = _usage(response)
             candidates = self._validate(response, units)
+            # Dependency/scope may have changed while the provider was running.
+            # Recheck outside the SQLite lock, then settlement gates once more.
+            self._check(units)
             with self.store.lock:
                 current = self.store.dispatch_allowed([u["id"] for u in units], self._epoch, self._now())
                 self.store.settle(attempt["id"], usage, candidates, self._now())

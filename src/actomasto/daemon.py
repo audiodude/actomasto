@@ -13,8 +13,8 @@ import time
 from pathlib import Path
 
 from .common import SourceCancelled, credential, locations, secure_dir, writer_lock
-from .adapters import AdapterError, collect as conversations
-from .config import validate
+from .funes_source import FunesSource, SourceError, VERSIONS
+from .config import ConfigError, scope_fingerprints, validate
 from .discovery import discover, verify
 from .generation import Generator
 from .git_source import GitSourceError, collect as commits
@@ -62,6 +62,57 @@ class Runtime:
         return any(r['id'] == repository_id and r['state'] == 'public' and r['public_until'] > time.time()
                    for r in self.store.repositories()) and self.allowed()
 
+    def _source(self, settings, cancelled):
+        if settings.get('funes_migration') == 'pending' or settings['config'].get('version') != 2:
+            raise SourceError('migration_required')
+        source = FunesSource(settings['config']['funes'], cancelled)
+        source.capabilities()
+        return source
+
+    def _scope(self, settings, client):
+        try:
+            actual = scope_fingerprints(settings['config'])
+        except (ConfigError, OSError, ValueError):
+            raise SourceError('invalid_scope') from None
+        if actual.get(client) != settings.get('funes_scope', {}).get(client):
+            raise SourceError('scope_changed')
+
+    def _source_status(self, client, source, error=None):
+        status = dict(source.status) if source else {}
+        status['error'] = error
+        self.store.save_cursor('funes-status:' + client, status)
+        self.store.invalidate_adapter(client, error is None, time.time())
+
+    def source_check(self, units):
+        """Refresh only affected harness health at dispatch AND settlement."""
+        clients = {unit.get('adapter') for unit in units if unit.get('kind') == 'conversation'}
+        if not clients:
+            return True
+        settings = self.store.settings()
+        def cancelled():
+            if not self.allowed() or self.store.settings()['epoch'] != settings['epoch']:
+                raise SourceCancelled()
+        source = None
+        try:
+            cancelled()
+            source = self._source(settings, cancelled)
+        except SourceError as exc:
+            for client in clients:
+                self._source_status(client, source, exc.code)
+            return False
+        healthy = True
+        for client in clients:
+            try:
+                self._scope(settings, client)
+                source.cancelled = lambda: (cancelled(), self._scope(settings, client))
+                source.health(client)
+                cancelled()
+                self._source_status(client, source)
+            except SourceError as exc:
+                self._source_status(client, source, exc.code)
+                healthy = False
+        return healthy
+
     def scan(self, force=False):
         with self.scan_lock:
             if not self.allowed():
@@ -106,6 +157,8 @@ class Runtime:
         with self.store.lock:
             if not self.allowed() or self.store.settings()['epoch'] != epoch:
                 return False
+            if unit.get('kind') == 'conversation':
+                self._scope(self.store.settings(), unit.get('adapter'))
             now = time.time()
             self.store.expire(now)
             if self.store.seen(unit):
@@ -121,6 +174,8 @@ class Runtime:
             unit['repository_display'] = repository['display_path']
             policy = Policy(self.store.settings()['config'])
             filtered = policy.filter(unit)
+            if unit.get('kind') == 'conversation':
+                self._scope(self.store.settings(), unit.get('adapter'))
             if filtered is None:
                 self.store.mark(unit, policy.last_reason or 'blocked')
             else:
@@ -170,17 +225,29 @@ class Runtime:
         for entry in (self.store.cursor('discovery_status') or {}).get('candidates', []):
             if entry['path'] not in known_paths:
                 associated.append({'id': 'ineligible:' + entry['path'], 'paths': [entry['path']]})
-        for client in ('claude', 'codex', 'omp'):
+        source = None
+        try:
+            source = self._source(settings, cancelled)
+        except SourceError as exc:
+            for client in VERSIONS:
+                self._source_status(client, source, exc.code)
+            return
+        for client in VERSIONS:
             cancelled()
             try:
-                for unit in conversations(client, Path(config['sources'][client + '_root']).expanduser(), associated,
-                                          self.store.cursor, self.store.save_cursor, self.store.eligible,
-                                          cancelled=cancelled):
+                self._scope(settings, client)
+                source.cancelled = lambda: (cancelled(), self._scope(settings, client))
+                for unit in source.collect(client, associated, self.store.cursor, self.store.save_cursor,
+                                           self.store.eligible, seen=self.store.seen):
                     if not self.accept(unit, by_id[unit['repository_id']], epoch):
                         return
-                self.store.invalidate_adapter(client, True, time.time())
-            except AdapterError:
-                self.store.invalidate_adapter(client, False, time.time())
+                cancelled()
+                self._source_status(client, source)
+            except SourceError as exc:
+                if exc.code in {'source_changed', 'invalid_cursor'}:
+                    cancelled()
+                    self.store.save_cursor('funes-enumeration:' + client, {'cursor': None})
+                self._source_status(client, source, exc.code)
 
     def work(self):
         try:
@@ -194,7 +261,9 @@ class Runtime:
                 if self.config_revision != settings['config_revision']:
                     if self.generator is not None and hasattr(self.generator, 'close'):
                         self.generator.close()
-                    self.generator = Generator(self.store, settings['config'], Policy(settings['config']), self.visibility, credential(), clock=time.time)
+                    self.generator = Generator(self.store, settings['config'], Policy(settings['config']),
+                                               self.visibility, credential(), clock=time.time,
+                                               source_check=self.source_check)
                     self.config_revision = settings['config_revision']
                 result = self.generator.cycle(time.time())
                 if result.get('candidates'):
@@ -247,7 +316,8 @@ class Runtime:
             now = time.time()
             if command == 'status':
                 return {**self.store.status(now), 'process_running': True, 'active_login': active_login(),
-                        'sources': self.store.source_health()}
+                        'sources': self.store.source_health(),
+                        'funes': {client: self.store.cursor('funes-status:' + client) for client in VERSIONS}}
             if command == 'repos':
                 return {'repositories': self.store.repositories(), 'discovery': self.store.cursor('discovery_status')}
             if command == 'list':
@@ -260,7 +330,7 @@ class Runtime:
                 self.store.set_enabled(command == 'on', now)
                 result = {'enabled': command == 'on'}
             elif command == 'apply':
-                self.store.apply_config(validate(request['config']), now)
+                self.store.apply_config(validate(request['config']), now, expected_scope=request['expected_scope'])
                 result = {'config_revision': self.store.settings()['config_revision']}
             elif command == 'purge':
                 result = self.store.purge(request.get('repo'), now)

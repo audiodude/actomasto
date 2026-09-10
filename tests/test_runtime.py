@@ -19,18 +19,27 @@ def runtime(tmp_path, monkeypatch):
         monkeypatch.setenv(key, str(tmp_path / sub))
     monkeypatch.setattr(daemon, 'active_login', lambda: True)
     store = Store(tmp_path / 'data' / 'actomasto')
+    scope = tmp_path / 'scope.json'
+    scope.write_text(json.dumps({'version': 1, 'roots': {name: [] for name in ('claude', 'codex', 'omp')}}))
+    scope.chmod(0o600)
     config = validate({'discovery': {'roots': [str(tmp_path / 'roots')]}, 'identity': {'author_emails': ['author@example.invalid']},
-                       'notifications': {'enabled': False}, 'sources': {name + '_root': str(tmp_path / name) for name in ('claude', 'codex', 'omp')}})
+                       'notifications': {'enabled': False},
+                       'funes': {'executable': '/missing/funes', 'corpus': str(tmp_path / 'corpus'), 'scope': str(scope)}})
     store.apply_config(config, time.time())
     app = daemon.Runtime(store)
     yield app, config
     store.close()
 
 
-def test_cli_init_requires_consent_and_stays_disabled(tmp_path, monkeypatch, capsys):
+def test_cli_init_requires_consent_and_stays_disabled(tmp_path, monkeypatch, capsys, funes_bin):
     for key, sub in [('XDG_CONFIG_HOME', 'config'), ('XDG_DATA_HOME', 'data'), ('XDG_RUNTIME_DIR', 'runtime')]:
         monkeypatch.setenv(key, str(tmp_path / sub))
-    assert cli.main(['init', '--root', str(tmp_path / 'roots'), '--author-email', 'author@example.invalid', '--accept-hosted-processing']) == 0
+    scope = tmp_path / 'scope.json'
+    scope.write_text(json.dumps({'version': 1, 'roots': {name: [] for name in ('claude', 'codex', 'omp')}}))
+    scope.chmod(0o600)
+    assert cli.main(['init', '--root', str(tmp_path / 'roots'), '--author-email', 'author@example.invalid',
+                     '--funes-bin', funes_bin, '--funes-corpus', str(tmp_path / 'corpus'),
+                     '--funes-scope', str(scope), '--accept-hosted-processing']) == 0
     assert json.loads(capsys.readouterr().out)['enabled'] is False
     assert cli.main(['status', '--json']) == 0
     status = json.loads(capsys.readouterr().out)
@@ -83,31 +92,6 @@ def test_logout_suspends_without_explicit_off_interval(runtime, monkeypatch):
     assert app.store.settings()['enabled'] and app.store.settings()['epoch'] == epoch
 
 
-def test_successful_collection_continues_to_all_adapters(runtime, monkeypatch):
-    app, _ = runtime
-    app.store.set_enabled(True, time.time())
-    monkeypatch.setattr(daemon, 'discover', lambda roots: [])
-    called = []
-    def adapters(client, *args, **kwargs):
-        called.append(client)
-        return iter(())
-    monkeypatch.setattr(daemon, 'conversations', adapters)
-    app.collect()
-    assert called == ['claude', 'codex', 'omp']
-    assert app.store.status(time.time())['adapters'] == {'claude': True, 'codex': True, 'omp': True}
-
-
-def test_failed_adapter_does_not_cancel_other_sources(runtime, monkeypatch):
-    app, _ = runtime
-    app.store.set_enabled(True, time.time())
-    monkeypatch.setattr(daemon, 'discover', lambda roots: [])
-    def adapters(client, *args, **kwargs):
-        if client == 'claude':
-            raise daemon.AdapterError('unsupported_version')
-        return iter(())
-    monkeypatch.setattr(daemon, 'conversations', adapters)
-    app.collect()
-    assert app.store.status(time.time())['adapters'] == {'claude': False, 'codex': True, 'omp': True}
 
 
 def test_notification_failure_is_visible_without_loop(runtime, monkeypatch):
