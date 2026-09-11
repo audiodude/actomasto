@@ -2,6 +2,8 @@
 
 Status: milestone 1 implemented with deterministic acceptance coverage and an authorized synthetic-only Anthropic smoke run. Operational instructions and verification boundaries are in §14. AI-assisted specification, implementation, and review prepared with OpenAI Codex.
 
+The [Funes integration design and implementation plan](funes-integration-plan.md) records the completed replacement of the three conversation adapters with a maintained Funes fork, preserving the policy and lifecycle contracts below. It includes the integration's acceptance evidence and limits; §14 remains the operational guide.
+
 ## 1. Outcome and scope
 
 A single-user Linux daemon discovers eligible public development repositories, collects the user's committed activity and eligible AI conversations, and produces grounded first-person Mastodon draft suggestions. A CLI lists drafts and their supporting evidence. Desktop notifications announce new drafts and actionable failures without displaying source content.
