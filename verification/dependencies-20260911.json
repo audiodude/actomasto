@@ -1,0 +1,70 @@
+{
+  "date": "2026-09-11",
+  "assistance": "OpenAI Codex",
+  "funes_revision": "65b91893d2ca7be80a18ed578c392c8260559b8f",
+  "funes_sha256": "cc41cc05867f0c101aa06ddb9297a5d22f4c23b7f58fef632f943bbb3ea7537b",
+  "python_lockfile": "uv lock --upgrade found no newer compatible versions; uv sync --locked passed",
+  "pytest": {
+    "command": "FUNES_TEST_BIN=/absolute/committed/funes uv run --locked pytest -q",
+    "passed": 210,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 6.31
+  },
+  "omp_version": "18.1.17",
+  "documentation_merge": "c0711c0 (includes local 0a45a9b without restoring unstarted status)",
+  "native_consumer": {
+    "funes_revision": "65b91893d2ca7be80a18ed578c392c8260559b8f",
+    "fixtures": [
+      {
+        "fixture": "complete",
+        "sha256": "9c4a3029f1f8cf5b62b50e1f367f94b7c1a5d9448cf350211dc65bbc77646354",
+        "units": 1,
+        "status": {
+          "dependency": "available",
+          "protocol": "compatible",
+          "build_revision": "65b91893d2ca7be80a18ed578c392c8260559b8f",
+          "coverage": "current",
+          "pending_turns": 0,
+          "streams": {
+            "complete": 1
+          },
+          "refreshed_at": 1789147251.373583,
+          "lag_seconds": 0.03468036651611328
+        },
+        "content_and_provenance": true,
+        "restart_no_replay": true,
+        "ineligible_interval_no_units": true,
+        "original_unchanged": true
+      },
+      {
+        "fixture": "abort",
+        "sha256": "e4702053f4a540276f1662a8f2c4ab122dc1ca9110af9aff9bf07943ea63783e",
+        "units": 0,
+        "status": {
+          "dependency": "available",
+          "protocol": "compatible",
+          "build_revision": "65b91893d2ca7be80a18ed578c392c8260559b8f",
+          "coverage": "current",
+          "pending_turns": 1,
+          "streams": {
+            "incomplete_turn": 1
+          },
+          "refreshed_at": 1789147251.5037766,
+          "lag_seconds": 0.03428530693054199
+        },
+        "content_and_provenance": true,
+        "restart_no_replay": true,
+        "ineligible_interval_no_units": true,
+        "original_unchanged": true
+      }
+    ],
+    "synthetic_only": true,
+    "hosted_generation": false
+  },
+  "limits": [
+    "Synthetic smoke originals only; no private transcripts.",
+    "No hosted generation, live installation, enrollment, publication, push, or deployment.",
+    "Harness normalization contracts and existing unsupported-format exclusions are unchanged."
+  ]
+}

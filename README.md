@@ -4,16 +4,16 @@ A single-user Linux service that makes evidence-grounded Mastodon **drafts**, ne
 
 ## Installation
 
-Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/69387f12dca29c2c8e939b0d9890e5768cc2067c/docs/local-source.md). The tested fork revision is `69387f12dca29c2c8e939b0d9890e5768cc2067c`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
+Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The tested dependency revision is `65b91893d2ca7be80a18ed578c392c8260559b8f`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
 
-Build Funes independently (tested with Rust 1.98.1, protoc, and lld on Linux), then use the absolute path to `funes/target/debug/funes`:
+Build Funes independently (tested with Rust 1.98.0, protoc, and lld on Linux), then use the absolute path to its `target/debug/funes`. This dependency revision is committed locally, not published: use the supplied Funes worktree at that revision rather than trying to fetch it from GitHub.
 
 ```sh
-git clone https://github.com/audiodude/funes.git
-git -C funes checkout --detach 69387f12dca29c2c8e939b0d9890e5768cc2067c
+FUNES_SOURCE=/absolute/funes-worktree
+git -C "$FUNES_SOURCE" rev-parse HEAD # must match the tested revision above
 CARGO_BUILD_JOBS=2 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_DEV_OPT_LEVEL=1 \
   CARGO_PROFILE_DEV_INCREMENTAL=false RUSTFLAGS="-C link-arg=-fuse-ld=lld" \
-  cargo build --locked --manifest-path funes/Cargo.toml
+  cargo build --locked --manifest-path "$FUNES_SOURCE/Cargo.toml"
 ```
 
 Independently create an explicitly approved enrollment file (0600, parent directory 0700):
@@ -55,8 +55,10 @@ Every enrollment array must exactly match its expanded canonical legacy root. Mi
 
 ## Verification
 
-`FUNES_TEST_BIN=/absolute/fork/funes uv run pytest -q` exercises the real source subprocess contract. Without that explicit binary, cross-process cases skip rather than substituting a mock parser. Current evidence records 210 passing tests, 32 exact pre-cutover equivalence cases, restart-safe migration, dependency outage/recovery, and an authorized synthetic Anthropic run costing $0.010623 under a $1 cap. No posts were published or live sources enrolled. Implementation assisted by OpenAI Codex.
+`FUNES_TEST_BIN=/absolute/fork/funes uv run pytest -q` exercises the real source subprocess contract. Without that explicit binary, cross-process cases skip rather than substituting a mock parser. Initial integration evidence records 210 passing tests, 32 exact pre-cutover equivalence cases, restart-safe migration, dependency outage/recovery, and an authorized synthetic Anthropic run costing $0.010623 under a $1 cap. No posts were published or live sources enrolled. Implementation assisted by OpenAI Codex.
 
 Actomasto consumes Funes source protocol 1 and its `omp-session3-schema1` capability, not the OMP extension API or an OMP package-version pin. The bridge's separately recorded [OMP 18.1.17 compatibility evidence](https://github.com/audiodude/omp-funes-bridge/blob/e50207d/verification/omp-18.1.17.json) does not replace the Actomasto measurements above, whose recorded environment used OMP 18.1.15. A native transcript schema rejected by Funes still pauses the affected harness; upgrading the bridge alone does not make that schema supported.
 
 Fresh [OMP 18.1.17 consumer verification](verification/omp-18.1.17.json) passed all 210 tests with the real pinned Funes executable. Native RPC-authored completed turns retained exact text, provenance, and identity; aborted turns remained pending. Restart replay and ineligible-interval exclusion passed. This does not certify every historical transcript: the pinned Funes normalizer rejects `session_init` in older OMP child sessions, and live Actomasto also reports unsupported Codex versions. Those parser limitations are unchanged by this compatibility update.
+
+The [September dependency refresh](verification/dependencies-20260911.json) passed all 210 tests against the rebuilt committed Funes revision above, plus native OMP 18.1.17 completed/aborted-turn consumption, exact text/provenance, restart deduplication, and interval exclusions. `uv lock --upgrade` found no newer compatible Python dependencies. The local plan commit `0a45a9b` is merged without restoring its superseded “implementation not started” status. No private transcripts, hosted generation, live service changes, publication, or deployment were used; parser limitations remain unchanged.
