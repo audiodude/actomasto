@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "date": "2026-09-11T05:38:10.479Z",
+  "assistance": "OpenAI Codex",
+  "omp": {
+    "version": "18.1.17",
+    "upstream_commit": "3b3a6dc9bbd85102ce19d0b1c11bf6870915f6ec",
+    "authoring": "Installed omp/18.1.17 RPC with bridge probes/lifecycle.ts synthetic provider; completed and aborted sessions persisted; no hosted provider request."
+  },
+  "bridge": {
+    "commit": "e50207d",
+    "verification": "https://github.com/audiodude/omp-funes-bridge/blob/e50207d/verification/omp-18.1.17.json"
+  },
+  "funes": {
+    "revision": "69387f12dca29c2c8e939b0d9890e5768cc2067c",
+    "sha256": "22b2068b969ac49ad5613955db97dc92f40807260070f62f8e5f366919ff7355",
+    "source_protocol": 1,
+    "omp_schema": "omp-session3-schema1",
+    "rebuilt": false
+  },
+  "tests": {
+    "command": "FUNES_TEST_BIN=/absolute/pinned/funes uv run pytest -q",
+    "passed": 210,
+    "failed": 0,
+    "skipped": 0
+  },
+  "native_consumer": {
+    "schema_version": 1,
+    "omp_authoring_version_supplied_by_operator": "18.1.17",
+    "funes_executable": "/home/tmoney/code/vibes/omp-funes-bridge/.build/funes-69387f12/bin/funes",
+    "fixtures": [
+      {
+        "fixture": "/home/tmoney/code/vibes/omp-funes-bridge/.build/dependents-18.1.17-q1Fq5f/life-0/session.jsonl",
+        "sha256": "0430794246d24d457aad51145124eaea65e5fc9c61f768573f0451ebe90e0b30",
+        "session_id": "01a08ef8-6ba1-772e-b2b4-6e8a65f7bf67",
+        "units": 1,
+        "unit_ids": [
+          "6d20777132e0c97e4804ba9b15e97f844e18439a499bf7af30a46509695b041a"
+        ],
+        "status": {
+          "dependency": "available",
+          "protocol": "compatible",
+          "build_revision": "69387f12dca29c2c8e939b0d9890e5768cc2067c",
+          "coverage": "current",
+          "pending_turns": 0,
+          "streams": {
+            "complete": 1
+          },
+          "refreshed_at": 1789105066.525853,
+          "lag_seconds": 0.016347885131835938
+        },
+        "exact_expected_content_and_provenance": true,
+        "restart_no_replay": true,
+        "ineligible_interval_no_units": true
+      },
+      {
+        "fixture": "/home/tmoney/code/vibes/omp-funes-bridge/.build/dependents-18.1.17-q1Fq5f/life-1/session.jsonl",
+        "sha256": "f96be0f963d7a27cd0250f3a6a1a28b12df07968cddc9b9d0b9099c3a9acdafd",
+        "session_id": "01a08ef8-6b9b-777a-9c14-bb31195d2697",
+        "units": 0,
+        "unit_ids": [],
+        "status": {
+          "dependency": "available",
+          "protocol": "compatible",
+          "build_revision": "69387f12dca29c2c8e939b0d9890e5768cc2067c",
+          "coverage": "current",
+          "pending_turns": 1,
+          "streams": {
+            "incomplete_turn": 1
+          },
+          "refreshed_at": 1789105066.6373732,
+          "lag_seconds": 0.01669144630432129
+        },
+        "exact_expected_content_and_provenance": true,
+        "restart_no_replay": true,
+        "ineligible_interval_no_units": true
+      }
+    ],
+    "live_sources_enrolled": false,
+    "hosted_generation": false
+  },
+  "limits": [
+    "This is not renewed hosted-generation or full production-corpus acceptance.",
+    "Live diagnostic sampled a pre-18.1.17 child transcript: source turns returned unknown_content_schema; its session_init record is not accepted by the pinned normalizer. Actomasto remains fail-closed.",
+    "Live Actomasto also reports Codex unsupported_version; Codex support was not changed for this OMP compatibility update.",
+    "No Funes rebuild, consumer parser change, enrollment expansion, consent change, or budget change."
+  ]
+}

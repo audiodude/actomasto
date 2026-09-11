@@ -22,7 +22,7 @@ Independently create an explicitly approved enrollment file (0600, parent direct
 {"version":1,"roots":{"claude":["/absolute/claude-root"],"codex":["/absolute/codex-root"],"omp":["/absolute/omp-root"]}}
 ```
 
-Empty arrays enroll no sources. The local corpus directory must be private (0700). An independent operator/indexer must send a `refresh` request at least once per minute; the bridge specification includes a [standalone user-timer example](https://github.com/audiodude/omp-funes-bridge/blob/feat/funes-source/SPEC.md#standalone-multi-harness-source-inventory). After five minutes without refresh, coverage is `lagging` and conversations pause; Git remains independent. Missing enrolled roots report unavailable coverage, not empty activity. No semantic embeddings, provider access, or active OMP session are needed for this inventory.
+Empty arrays enroll no sources. The local corpus directory must be private (0700). An independent operator/indexer must send a `refresh` request at least once per minute; the published bridge specification includes a [standalone user-timer example](https://github.com/audiodude/omp-funes-bridge/blob/e50207d/SPEC.md#standalone-multi-harness-source-inventory). After five minutes without refresh, coverage is `lagging` and conversations pause; Git remains independent. Missing enrolled roots report unavailable coverage, not empty activity. No semantic embeddings, provider access, or active OMP session are needed for this inventory.
 
 ```sh
 printf '%s\n' '{"protocol":1,"op":"refresh","corpus":"/absolute/local-corpus","scope":"/absolute/enrollment.json"}' | /absolute/funes source
@@ -56,3 +56,7 @@ Every enrollment array must exactly match its expanded canonical legacy root. Mi
 ## Verification
 
 `FUNES_TEST_BIN=/absolute/fork/funes uv run pytest -q` exercises the real source subprocess contract. Without that explicit binary, cross-process cases skip rather than substituting a mock parser. Current evidence records 210 passing tests, 32 exact pre-cutover equivalence cases, restart-safe migration, dependency outage/recovery, and an authorized synthetic Anthropic run costing $0.010623 under a $1 cap. No posts were published or live sources enrolled. Implementation assisted by OpenAI Codex.
+
+Actomasto consumes Funes source protocol 1 and its `omp-session3-schema1` capability, not the OMP extension API or an OMP package-version pin. The bridge's separately recorded [OMP 18.1.17 compatibility evidence](https://github.com/audiodude/omp-funes-bridge/blob/e50207d/verification/omp-18.1.17.json) does not replace the Actomasto measurements above, whose recorded environment used OMP 18.1.15. A native transcript schema rejected by Funes still pauses the affected harness; upgrading the bridge alone does not make that schema supported.
+
+Fresh [OMP 18.1.17 consumer verification](verification/omp-18.1.17.json) passed all 210 tests with the real pinned Funes executable. Native RPC-authored completed turns retained exact text, provenance, and identity; aborted turns remained pending. Restart replay and ineligible-interval exclusion passed. This does not certify every historical transcript: the pinned Funes normalizer rejects `session_init` in older OMP child sessions, and live Actomasto also reports unsupported Codex versions. Those parser limitations are unchanged by this compatibility update.
