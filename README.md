@@ -4,9 +4,9 @@ A single-user Linux service that makes evidence-grounded Mastodon **drafts**, ne
 
 ## Installation
 
-Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The tested dependency revision is `65b91893d2ca7be80a18ed578c392c8260559b8f`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
+Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The tested dependency revision is `a847bd5e0d2c17ade3baa6cb49c5b29340d691fb`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
 
-Build Funes independently (tested with Rust 1.98.0, protoc, and lld on Linux), then use the absolute path to its `target/debug/funes`. This dependency revision is committed locally, not published: use the supplied Funes worktree at that revision rather than trying to fetch it from GitHub.
+Build Funes independently (tested with Rust 1.98.0, protoc, and lld on Linux), then use the absolute path to its `target/debug/funes`. Fetch the tested revision from the maintained fork and build that exact checkout.
 
 ```sh
 FUNES_SOURCE=/absolute/funes-worktree
@@ -36,6 +36,12 @@ uv run actomasto service install
 
 The CLI/source/migration and foreground-daemon paths were exercised with synthetic originals and the actual fork; see [verification evidence](verification/funes-integration.json). No live service installation was performed. Replace all example paths. `init` checks metadata capabilities and requests hosted-processing consent, but starts disabled. Configure blocklists and provision `ANTHROPIC_API_KEY` in the launch environment or private `$XDG_CONFIG_HOME/actomasto/credentials.env`, then explicitly run `config apply` and `on`. Do not put secrets in CLI arguments. See [full operation and consent instructions](mastodon-activity-app-notes.md#14-running-the-implementation).
 
+## Updating an existing v2 installation
+
+Run `uv sync --locked` in the updated checkout and verify its Funes executable before switching the service. Stop the process with `systemctl --user stop actomasto.service`, not `off`, which records an exclusion interval. Back up the private configuration and database while stopped. Change only `[funes].executable` in `config.toml`, preserving the corpus, enrollment, and other settings; run `actomasto config validate` and `actomasto config apply`. Check for unrelated unapplied edits first: apply also clears a generation pause and advances the configuration revision.
+
+Point the user service's `ExecStart` at the updated checkout's `.venv/bin/actomasto daemon`, preserving its other settings. Run `systemctl --user daemon-reload`, restart the independent Funes refresh service/timer with the same verified executable, then start Actomasto and inspect `actomasto status --json`. Keep the checkout and virtual environment while the service uses them. Updating a v2 executable does not require `config migrate`, new enrollment, or resetting processing history.
+
 ## Existing v1 installations
 
 Stop the service process without issuing `off` (which records an actual exclusion interval), then migrate with the same three explicit Funes flags:
@@ -61,4 +67,6 @@ Actomasto consumes Funes source protocol 1 and its `omp-session3-schema1` capabi
 
 Fresh [OMP 18.1.17 consumer verification](verification/omp-18.1.17.json) passed all 210 tests with the real pinned Funes executable. Native RPC-authored completed turns retained exact text, provenance, and identity; aborted turns remained pending. Restart replay and ineligible-interval exclusion passed. This does not certify every historical transcript: the pinned Funes normalizer rejects `session_init` in older OMP child sessions, and live Actomasto also reports unsupported Codex versions. Those parser limitations are unchanged by this compatibility update.
 
-The [September dependency refresh](verification/dependencies-20260911.json) passed all 210 tests against the rebuilt committed Funes revision above, plus native OMP 18.1.17 completed/aborted-turn consumption, exact text/provenance, restart deduplication, and interval exclusions. `uv lock --upgrade` found no newer compatible Python dependencies. The local plan commit `0a45a9b` is merged without restoring its superseded “implementation not started” status. No private transcripts, hosted generation, live service changes, publication, or deployment were used; parser limitations remain unchanged.
+The historical [September dependency refresh](verification/dependencies-20260911.json) passed all 210 tests against Funes `65b91893d2ca7be80a18ed578c392c8260559b8f`, plus native OMP 18.1.17 completed/aborted-turn consumption, exact text/provenance, restart deduplication, and interval exclusions. `uv lock --upgrade` found no newer compatible Python dependencies. The local plan commit `0a45a9b` is merged without restoring its superseded “implementation not started” status. No private transcripts, hosted generation, live service changes, publication, or deployment were used; parser limitations remain unchanged.
+
+The [OMP 18.1.19 local-stack refresh](verification/dependencies-20260912.json) passed 210 tests with the newly rebuilt Funes revision above. Native RPC-authored completed turns retained exact text, provenance, and identity; aborted turns remained pending, and restart deduplication and ineligible-interval exclusion passed. A fresh locked virtual environment uses the existing Python dependency versions: a cache-refreshed upgrade found no newer compatible versions. These synthetic checks do not certify unsupported historical Codex or OMP source formats.

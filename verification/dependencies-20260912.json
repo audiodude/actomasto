@@ -1,0 +1,85 @@
+{
+  "date": "2026-09-13T02:01:01.850Z",
+  "assistance": "OpenAI Codex",
+  "funes": {
+    "revision": "a847bd5e0d2c17ade3baa6cb49c5b29340d691fb",
+    "sha256": "8c091129d910add2d23b094aad287c11dfc0aee25cf80dec128f0008368bce35",
+    "version": "1.4.0+dev",
+    "build": "cargo build --locked",
+    "tests": {
+      "command": "cargo test --locked --lib --bin funes --test local_source_normalize",
+      "passed": 288,
+      "failed": 0
+    },
+    "lockedDependencyUpdates": [
+      "bytemuck_derive 1.12.0 -> 1.12.1",
+      "crc32fast 1.5.1 -> 1.5.2",
+      "jiff 0.2.35 -> 0.2.37",
+      "jiff-core 0.1.0 -> 0.1.1",
+      "jiff-static 0.2.35 -> 0.2.37",
+      "libredox 0.1.23 -> 0.1.24"
+    ]
+  },
+  "baseRevision": "64526259fe79076906a8d1b3f47e0d0e1e6494d2",
+  "pythonDependencyChanges": [],
+  "uvLockedSync": true,
+  "tests": {
+    "passed": 210,
+    "failed": 0,
+    "realFunesBinary": true
+  },
+  "nativeConsumer": {
+    "omp_version": "18.1.19",
+    "fixtures": [
+      {
+        "fixture": "complete",
+        "sha256": "edad443a76f02608478990927403a5b1d0b9ed866f92327e6d534e028ffe494f",
+        "units": 1,
+        "status": {
+          "dependency": "available",
+          "protocol": "compatible",
+          "build_revision": "a847bd5e0d2c17ade3baa6cb49c5b29340d691fb",
+          "coverage": "current",
+          "pending_turns": 0,
+          "streams": {
+            "complete": 1
+          },
+          "refreshed_at": 1789264670.460291,
+          "lag_seconds": 0.017879962921142578
+        },
+        "content_and_provenance": true,
+        "restart_no_replay": true,
+        "ineligible_interval_no_units": true,
+        "original_unchanged": true
+      },
+      {
+        "fixture": "abort",
+        "sha256": "160733a965b67d6af96caabd9ab096d847fa920566d7141d3a3c52e634a72672",
+        "units": 0,
+        "status": {
+          "dependency": "available",
+          "protocol": "compatible",
+          "build_revision": "a847bd5e0d2c17ade3baa6cb49c5b29340d691fb",
+          "coverage": "current",
+          "pending_turns": 1,
+          "streams": {
+            "incomplete_turn": 1
+          },
+          "refreshed_at": 1789264670.5689223,
+          "lag_seconds": 0.015452384948730469
+        },
+        "content_and_provenance": true,
+        "restart_no_replay": true,
+        "ineligible_interval_no_units": true,
+        "original_unchanged": true
+      }
+    ],
+    "synthetic_only": true,
+    "hosted_generation": false
+  },
+  "limits": [
+    "Synthetic verification only; local rollout is a separate operation.",
+    "Previously unsupported historical Codex and OMP formats remain unsupported.",
+    "No hosted generation, release tags, or Hugging Face release publication exercised."
+  ]
+}
