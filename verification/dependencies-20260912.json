@@ -78,8 +78,34 @@
     "hosted_generation": false
   },
   "limits": [
-    "Synthetic verification only; local rollout is a separate operation.",
+    "Compatibility probes used synthetic originals; separately authorized local activation reused existing enrollment and state.",
     "Previously unsupported historical Codex and OMP formats remain unsupported.",
     "No hosted generation, release tags, or Hugging Face release publication exercised."
-  ]
+  ],
+  "localRollout": {
+    "actomasto": {
+      "runtime": "/home/tmoney/code/vibes/actomasto/.worktrees/update-local-20260912/.venv/bin/actomasto",
+      "running": true,
+      "configRevision": 4,
+      "scopeAndControlsPreserved": true,
+      "durableRowCountsPreservedDuringCutover": true,
+      "configApply": "passed",
+      "fullConfigPreview": "failed: discovery_limit",
+      "collectionHealthy": false,
+      "daemonSourceStatus": "retains stale pre-upgrade metadata; adapter health false",
+      "freshMetadataCheck": {
+        "revision": "a847bd5e0d2c17ade3baa6cb49c5b29340d691fb",
+        "protocol": "compatible",
+        "claude": "available",
+        "codex": "unsupported_version",
+        "omp": "unknown_content_schema"
+      }
+    },
+    "services": {
+      "actomasto": "active",
+      "funesSourceRefresh": "oneshot succeeded, exit 0",
+      "funesSourceRefreshTimer": "active, waiting"
+    },
+    "releaseArtifactsPublished": false
+  }
 }
