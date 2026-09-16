@@ -4,7 +4,7 @@ A single-user Linux service that makes evidence-grounded Mastodon **drafts**, ne
 
 ## Installation
 
-Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The tested dependency revision is `65b91893d2ca7be80a18ed578c392c8260559b8f`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
+Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The tested dependency revision is `994232af714fc8466a95ab32db6c4411e5e1f685`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
 
 Build Funes independently (tested with Rust 1.98.0, protoc, and lld on Linux), then use the absolute path to its `target/debug/funes`. Check out the tested revision above in a separate Funes source worktree before building; a source commit is not a published binary.
 
@@ -94,3 +94,10 @@ FUNES_TEST_BIN=/absolute/rebuilt/funes uv run --locked pytest -q
 ```
 
 The CLI help command is a no-state CLI smoke check, not a source-compatibility check. The real-binary tests use temporary synthetic corpora; `tests/test_funes_source.py` exercises complete-turn text/provenance, restart replay, incomplete writes and exclusion intervals, and `tests/test_funes_runtime.py` exercises collection and dependency outages. Native OMP 18.2.1 completed and aborted transcripts must additionally be exercised through `FunesSource.collect` before claiming that runtime is verified; the static session-v3 fixture alone does not establish native-authoring compatibility.
+
+The [September 16 verification](verification/dependencies-20260916.json) passed all
+210 tests against that rebuilt revision. Native OMP 18.2.1 completed and aborted
+turns passed exact text/provenance, restart deduplication and exclusion checks:
+one complete turn was emitted, while the aborted turn remained pending. No
+hosted generation or release publication was exercised. Existing unsupported
+historical transcript formats remain outside this verification.

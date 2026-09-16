@@ -1,0 +1,74 @@
+{
+  "date": "2026-09-16T10:01:44.877Z",
+  "assistance": "OpenAI Codex",
+  "ompVersion": "18.2.1",
+  "funes": {
+    "revision": "994232af714fc8466a95ab32db6c4411e5e1f685",
+    "sha256": "dd1143dc8b1e357c4070eacd4fda1f881b09a94ecab88af8f45d63a5b19e4079",
+    "build": "cargo build --locked",
+    "tests": {
+      "command": "cargo test --locked --lib --bin funes --test local_source_normalize",
+      "passed": 288,
+      "failed": 0
+    },
+    "compatibleCargoUpdates": 25
+  },
+  "lockRevision": "34a28b1b82a422bceec43e53466085a491ca752c",
+  "dependencyUpdates": [
+    "urllib3 2.7.0 -> 2.8.0"
+  ],
+  "tests": {
+    "passed": 210,
+    "failed": 0,
+    "realFunesBinary": true
+  },
+  "nativeConsumer": [
+    {
+      "fixture": "complete",
+      "sha256": "7bc9cbc5b32f89fd309357b595d5a9656a94062f2f55b2b4423045e534cd2f1d",
+      "units": 1,
+      "status": {
+        "dependency": "available",
+        "protocol": "compatible",
+        "build_revision": "994232af714fc8466a95ab32db6c4411e5e1f685",
+        "coverage": "current",
+        "pending_turns": 0,
+        "streams": {
+          "complete": 1
+        },
+        "refreshed_at": 1789552842.3742175,
+        "lag_seconds": 0.01641106605529785
+      },
+      "contentAndProvenance": true,
+      "restartNoReplay": true,
+      "excludedIntervalNotReplayed": true,
+      "originalUnchanged": true
+    },
+    {
+      "fixture": "abort",
+      "sha256": "b4d1ba4fd8acd643acae6dfba3e7e78d6786a96889880fbef396ea1fb9b6815d",
+      "units": 0,
+      "status": {
+        "dependency": "available",
+        "protocol": "compatible",
+        "build_revision": "994232af714fc8466a95ab32db6c4411e5e1f685",
+        "coverage": "current",
+        "pending_turns": 1,
+        "streams": {
+          "incomplete_turn": 1
+        },
+        "refreshed_at": 1789552842.486049,
+        "lag_seconds": 0.015969038009643555
+      },
+      "contentAndProvenance": true,
+      "restartNoReplay": true,
+      "excludedIntervalNotReplayed": true,
+      "originalUnchanged": true
+    }
+  ],
+  "limits": [
+    "Synthetic originals only for compatibility probes; live rollout recorded separately.",
+    "No hosted generation or release publication exercised.",
+    "Previously unsupported historical formats remain unsupported."
+  ]
+}
