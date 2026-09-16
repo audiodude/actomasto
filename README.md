@@ -6,7 +6,7 @@ A single-user Linux service that makes evidence-grounded Mastodon **drafts**, ne
 
 Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The tested dependency revision is `65b91893d2ca7be80a18ed578c392c8260559b8f`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
 
-Build Funes independently (tested with Rust 1.98.0, protoc, and lld on Linux), then use the absolute path to its `target/debug/funes`. This dependency revision is committed locally, not published: use the supplied Funes worktree at that revision rather than trying to fetch it from GitHub.
+Build Funes independently (tested with Rust 1.98.0, protoc, and lld on Linux), then use the absolute path to its `target/debug/funes`. Check out the tested revision above in a separate Funes source worktree before building; a source commit is not a published binary.
 
 ```sh
 FUNES_SOURCE=/absolute/funes-worktree
@@ -49,6 +49,28 @@ systemctl --user start actomasto.service
 
 Every enrollment array must exactly match its expanded canonical legacy root. Migration preserves enabled state, import/off intervals, history, drafts, spending, pending collection times and original expiries. It upgrades the database so old binaries refuse it. Unsupported capabilities or mismatched roots leave conversations closed; the new runtime can continue Git after the explicit migration attempt. If interrupted after the SQLite commit, rerun the same migration to repair the configuration file. Never reset state or substitute a historical cutoff.
 
+## Updating an existing v2 installation
+
+Do not rerun `init` or use `config migrate` to change the Funes executable in an already migrated installation. Migration accepts an identical v2 configuration only for crash recovery. Use `config apply` instead, keeping the existing configuration, database, corpus and enrollment file.
+
+From the new Actomasto checkout, first synchronize its environment. Stop the old service process without running `off` or `service uninstall`; those commands intentionally change collection controls:
+
+```sh
+uv sync --locked
+systemctl --user stop actomasto.service
+```
+
+Edit **only** `executable` under `[funes]` in `${XDG_CONFIG_HOME:-$HOME/.config}/actomasto/config.toml` to the absolute path of the rebuilt Funes binary. Leave `corpus`, `scope`, discovery roots, identity, blocklists and budgets unchanged; do not rewrite the independent enrollment file. Review the existing controls with `uv run --locked actomasto status --json`, then apply and install from the new checkout:
+
+```sh
+uv run --locked actomasto config validate
+uv run --locked actomasto config apply
+uv run --locked actomasto service install
+uv run --locked actomasto status --json
+```
+
+`config apply` asks for hosted-processing/scope confirmation; use `--yes` only after reviewing the unchanged scope. Applying a binary-path-only change preserves enabled/off state, collection intervals, spending, history and enrollment, and makes conversation health fail closed until the new dependency is checked. Like any configuration apply, it clears a generation-error pause; review that state before proceeding. It does not implicitly enable collection with `on`. `service install` writes the unit for the new checkout's virtual-environment executable, reloads systemd and enables/starts the service; stopping first is necessary because installing over a running service does not restart its old process. Keep the checkout and its `.venv` available afterward. These commands are operator rollout instructions, not a record of a performed live update.
+
 ## Privacy and controls
 
 `off`, login, budget, and revocation gates control Actomasto reads and hosted processing, **not independent Funes indexing**. Actomasto never enrolls, refreshes, semantically indexes, or remotely binds memory. `purge` deletes Actomasto drafts/evidence/pending content while preserving processing markers and spending. It does not delete original transcripts, independent corpus/enrollment/indexes, backups, or provider-held requests. Scope changes require explicit configuration apply; affected queued units are revoked. Conversation health starts closed on every restart until the current dependency and harnesses are validated.
@@ -62,3 +84,13 @@ Actomasto consumes Funes source protocol 1 and its `omp-session3-schema1` capabi
 Fresh [OMP 18.1.17 consumer verification](verification/omp-18.1.17.json) passed all 210 tests with the real pinned Funes executable. Native RPC-authored completed turns retained exact text, provenance, and identity; aborted turns remained pending. Restart replay and ineligible-interval exclusion passed. This does not certify every historical transcript: the pinned Funes normalizer rejects `session_init` in older OMP child sessions, and live Actomasto also reports unsupported Codex versions. Those parser limitations are unchanged by this compatibility update.
 
 The [September dependency refresh](verification/dependencies-20260911.json) passed all 210 tests against the rebuilt committed Funes revision above, plus native OMP 18.1.17 completed/aborted-turn consumption, exact text/provenance, restart deduplication, and interval exclusions. `uv lock --upgrade` found no newer compatible Python dependencies. The local plan commit `0a45a9b` is merged without restoring its superseded “implementation not started” status. No private transcripts, hosted generation, live service changes, publication, or deployment were used; parser limitations remain unchanged.
+
+The September 16 lock refresh (`uv lock --upgrade`) updated only `urllib3` from 2.7.0 to 2.8.0 within the existing declared constraints. Actomasto has no OMP package-version constraint to change for OMP 18.2.1: compatibility remains the source protocol/capability contract above. The older evidence files retain their original versions and are not proof of the new dependency or OMP runtime. Verify the refreshed environment and real Funes consumer before activation:
+
+```sh
+uv sync --locked
+uv run --locked actomasto --help
+FUNES_TEST_BIN=/absolute/rebuilt/funes uv run --locked pytest -q
+```
+
+The CLI help command is a no-state CLI smoke check, not a source-compatibility check. The real-binary tests use temporary synthetic corpora; `tests/test_funes_source.py` exercises complete-turn text/provenance, restart replay, incomplete writes and exclusion intervals, and `tests/test_funes_runtime.py` exercises collection and dependency outages. Native OMP 18.2.1 completed and aborted transcripts must additionally be exercised through `FunesSource.collect` before claiming that runtime is verified; the static session-v3 fixture alone does not establish native-authoring compatibility.
