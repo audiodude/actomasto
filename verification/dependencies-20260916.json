@@ -70,5 +70,60 @@
     "Synthetic originals only for compatibility probes; live rollout recorded separately.",
     "No hosted generation or release publication exercised.",
     "Previously unsupported historical formats remain unsupported."
-  ]
+  ],
+  "localRollout": {
+    "completedAt": "2026-09-16T10:05:07.068Z",
+    "runtime": "/home/tmoney/code/vibes/actomasto/.worktrees/update-local-20260916/.venv/bin/actomasto",
+    "running": true,
+    "configRevision": 5,
+    "scopeAndControlsPreserved": true,
+    "durableRowsPreservedExactlyDuringApply": true,
+    "configApply": "passed",
+    "configPreview": "failed: discovery_limit",
+    "collectionHealthy": false,
+    "daemonSourceStatus": "retains stale pre-upgrade metadata; adapter health false",
+    "freshMetadataCheck": {
+      "claude": {
+        "dependency": "available",
+        "protocol": "compatible",
+        "build_revision": "994232af714fc8466a95ab32db6c4411e5e1f685",
+        "coverage": "current",
+        "pending_turns": 0,
+        "streams": {},
+        "refreshed_at": 1789553025.148311,
+        "lag_seconds": 25.74263596534729,
+        "error": "source_missing"
+      },
+      "codex": {
+        "dependency": "available",
+        "protocol": "compatible",
+        "build_revision": "994232af714fc8466a95ab32db6c4411e5e1f685",
+        "coverage": "current",
+        "pending_turns": 0,
+        "streams": {},
+        "refreshed_at": 1789553025.148311,
+        "lag_seconds": 25.751256704330444,
+        "error": "unknown_content_schema"
+      },
+      "omp": {
+        "dependency": "available",
+        "protocol": "compatible",
+        "build_revision": "994232af714fc8466a95ab32db6c4411e5e1f685",
+        "coverage": "current",
+        "pending_turns": 0,
+        "streams": {
+          "complete": 1
+        },
+        "refreshed_at": 1789553025.148311,
+        "lag_seconds": 25.767615795135498,
+        "error": "unknown_content_schema"
+      }
+    },
+    "services": {
+      "actomasto": "active/running",
+      "funesSourceRefresh": "oneshot succeeded, exit 0",
+      "funesSourceRefreshTimer": "active/waiting"
+    },
+    "releaseArtifactsPublished": false
+  }
 }
