@@ -4,7 +4,7 @@ A single-user Linux service that makes evidence-grounded Mastodon **drafts**, ne
 
 ## Installation
 
-Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The tested dependency revision is `994232af714fc8466a95ab32db6c4411e5e1f685`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
+Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The tested dependency revision is `7519c97c6bcdb23c70417d60d1a4df0c97a15241`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
 
 Build Funes independently (tested with Rust 1.98.0, protoc, and lld on Linux), then use the absolute path to its `target/debug/funes`. Check out the tested revision above in a separate Funes source worktree before building; a source commit is not a published binary.
 
@@ -101,3 +101,16 @@ turns passed exact text/provenance, restart deduplication and exclusion checks:
 one complete turn was emitted, while the aborted turn remained pending. No
 hosted generation or release publication was exercised. Existing unsupported
 historical transcript formats remain outside this verification.
+
+The September 17 refresh updates `idna` from 3.19 to 3.20. The locked environment,
+wheel/source-distribution build, CLI smoke, and all 210 tests passed against the
+tested Funes revision above. Native OMP 18.2.5 complete/abort consumption preserved
+text/provenance, left the aborted turn pending, and did not replay after restart
+or alter originals. The bridge's
+[rollout record](https://github.com/audiodude/omp-funes-bridge/blob/update-local-20260917/verification/dependencies-20260917.json)
+contains the measurements and local activation details. The updated worktree
+service reached readiness, but live adapters remain unhealthy with stale source
+status and existing unsupported-format errors. `config validate` also hits
+`discovery_limit`; applying the executable-only change with unchanged scope
+succeeded. This update does not repair those collection failures. No Hugging
+Face artifacts were deployed. Update and verification assisted by OpenAI Codex.
