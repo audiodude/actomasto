@@ -8,9 +8,9 @@ Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork im
 
 Build Funes independently (tested with Rust 1.98.0, protoc, and lld on Linux), then use the absolute path to its `target/debug/funes`. Check out the tested revision above in a separate Funes source worktree before building; a source commit is not a published binary.
 
-The collection-repair revision is currently a local commit on the Funes
-`fix-collection-health` branch, not a published upstream revision. Build from
-that supplied worktree until the commit is explicitly published.
+The collection-repair revision is available on the maintained Funes fork's
+`fix-collection-health` branch. Fetch that branch, then check out the exact tested
+revision above before building.
 
 ```sh
 FUNES_SOURCE=/absolute/funes-worktree
@@ -82,7 +82,7 @@ To limit commit processing, add this to `config.toml`, then run
 
 ```toml
 [git]
-since = "2026-01-01"
+since = "2026-03-01"
 ```
 
 The cutoff is inclusive midnight UTC, using the **committer date**, not the author
