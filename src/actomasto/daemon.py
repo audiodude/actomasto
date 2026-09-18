@@ -123,7 +123,17 @@ class Runtime:
             settings = self.store.settings()
             config = settings['config']
             policy = Policy(config)
-            discovered = discover(config['discovery']['roots'])
+            next_check = 0.
+            def cancelled():
+                nonlocal next_check
+                current = time.monotonic()
+                if current >= next_check:
+                    if not self.allowed() or self.store.settings()['epoch'] != settings['epoch']:
+                        raise SourceCancelled()
+                    # Streaming discovery checks every entry; bound database
+                    # polling without delaying shutdown by a complete scan.
+                    next_check = current + .1
+            discovered = discover(config['discovery']['roots'], cancelled=cancelled)
             results = {}
             for entry in discovered:
                 origin = entry.get('origin')

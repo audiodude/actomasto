@@ -4,9 +4,13 @@ A single-user Linux service that makes evidence-grounded Mastodon **drafts**, ne
 
 ## Installation
 
-Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The tested dependency revision is `7519c97c6bcdb23c70417d60d1a4df0c97a15241`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
+Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The tested dependency revision is `152307b3e9d34e34cc9ecc422960f2cc9971e797`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
 
 Build Funes independently (tested with Rust 1.98.0, protoc, and lld on Linux), then use the absolute path to its `target/debug/funes`. Check out the tested revision above in a separate Funes source worktree before building; a source commit is not a published binary.
+
+The collection-repair revision is currently a local commit on the Funes
+`fix-collection-health` branch, not a published upstream revision. Build from
+that supplied worktree until the commit is explicitly published.
 
 ```sh
 FUNES_SOURCE=/absolute/funes-worktree
@@ -75,6 +79,14 @@ uv run --locked actomasto status --json
 
 `off`, login, budget, and revocation gates control Actomasto reads and hosted processing, **not independent Funes indexing**. Actomasto never enrolls, refreshes, semantically indexes, or remotely binds memory. `purge` deletes Actomasto drafts/evidence/pending content while preserving processing markers and spending. It does not delete original transcripts, independent corpus/enrollment/indexes, backups, or provider-held requests. Scope changes require explicit configuration apply; affected queued units are revoked. Conversation health starts closed on every restart until the current dependency and harnesses are validated.
 
+Repository discovery traverses the full configured roots, including ignored
+dependency directories, nested repositories, and linked worktrees. It does not
+stop after a fixed total number of directories. Streaming traversal is bounded
+by a 60-second deadline, 128 directory levels, and 10,000 candidate/error records;
+exceeding a bound fails the scan without applying partial enrollment. Directory
+symlinks below a configured root are not followed. Disabling collection, losing
+the active login, or changing configuration cancels an in-progress daemon scan.
+
 ## Verification
 
 `FUNES_TEST_BIN=/absolute/fork/funes uv run pytest -q` exercises the real source subprocess contract. Without that explicit binary, cross-process cases skip rather than substituting a mock parser. Initial integration evidence records 210 passing tests, 32 exact pre-cutover equivalence cases, restart-safe migration, dependency outage/recovery, and an authorized synthetic Anthropic run costing $0.010623 under a $1 cap. No posts were published or live sources enrolled. Implementation assisted by OpenAI Codex.
@@ -104,13 +116,40 @@ historical transcript formats remain outside this verification.
 
 The September 17 refresh updates `idna` from 3.19 to 3.20. The locked environment,
 wheel/source-distribution build, CLI smoke, and all 210 tests passed against the
-tested Funes revision above. Native OMP 18.2.5 complete/abort consumption preserved
+Funes revision `7519c97c6bcdb23c70417d60d1a4df0c97a15241`. Native OMP 18.2.5 complete/abort consumption preserved
 text/provenance, left the aborted turn pending, and did not replay after restart
 or alter originals. The bridge's
 [rollout record](https://github.com/audiodude/omp-funes-bridge/blob/update-local-20260917/verification/dependencies-20260917.json)
 contains the measurements and local activation details. The updated worktree
-service reached readiness, but live adapters remain unhealthy with stale source
-status and existing unsupported-format errors. `config validate` also hits
+service reached readiness, but at that rollout live adapters remained unhealthy
+with stale source status and unsupported-format errors. `config validate` hit
 `discovery_limit`; applying the executable-only change with unchanged scope
-succeeded. This update does not repair those collection failures. No Hugging
+succeeded. That dependency update did not repair collection. No Hugging
 Face artifacts were deployed. Update and verification assisted by OpenAI Codex.
+
+The subsequent collection repair passed 297 Funes tests and all 220 Actomasto
+tests against the revision pinned above. Full-root discovery found 221 candidates
+in 3.1 seconds, and the real `config validate` command succeeded. A metadata-only
+live sweep recognized all 511 present transcripts: 7 Claude, 17 Codex, and 487 OMP
+sources. One changing OMP source required a current-revision retry; unfinished
+turns remained pending. No transcript text was printed or added to the repository.
+
+The repair supports observed Codex ordinal/native user-confirmation records and
+OMP child/auxiliary records without relaxing attribution, completion, or unknown
+schema gates. Five image-bearing Codex messages with nonmatching generated
+wrappers remain excluded by exact-text confirmation. Separately, 155 missing
+Claude originals remain inventory tombstones and block that harness: restore the
+originals or explicitly decide on an independent inventory rebuild; a parser
+upgrade cannot recover deleted files. Enrollment and processing markers were not
+reset. Repair and verification assisted by OpenAI Codex.
+
+Local activation replaced the executable pin and systemd runtime after a private
+SQLite/configuration backup. Enrollment, enabled/pause controls, spending,
+intervals, queued data, and processing markers were preserved during apply.
+The daemon resumed Git collection and queued new evidence. At the end of
+activation verification it was still scanning the 30,045-commit Oh My Pi history,
+before its conversation phase; the daemon's persisted conversation-health
+statuses had not yet refreshed. The live metadata sweep above verifies parser
+compatibility, not completion of that full daemon pass. Strict Clippy additionally
+reported four pre-existing `chunks_exact` warnings in Funes's inference and
+normalization code; build and regression tests passed.

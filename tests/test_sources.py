@@ -178,6 +178,107 @@ def test_discovery_nested_worktrees_symlinks_and_bare(repository, tmp_path):
     assert origins.count("github.com/team/repo") == 2
 
 
+def test_discovery_preserves_ignored_dependency_repositories_and_overlapping_roots(repository):
+    repository.commit({"file.txt": "base\n"})
+    repository.run("remote", "add", "origin", "https://github.com/team/public.git")
+    (repository.path / ".gitignore").write_text("node_modules/\n.worktrees/\n")
+    private = GitFixture(repository.path / "node_modules" / "dependency" / "private")
+    private.run("remote", "add", "origin", "https://gitlab.com/team/private.git")
+    worktree = repository.path / ".worktrees" / "linked"
+    repository.run("worktree", "add", "-b", "linked", str(worktree))
+    alias = repository.path.parent / "alias"
+    alias.symlink_to(repository.path, target_is_directory=True)
+
+    results = discover([alias, repository.path.parent, private.path])
+
+    assert {row["path"]: row["origin"] for row in results} == {
+        str(repository.path): "github.com/team/public",
+        str(private.path): "gitlab.com/team/private",
+        str(worktree): "github.com/team/public",
+    }
+    assert len(results) == 3
+
+
+def test_discovery_deadline_fails_without_returning_partial_candidates(repository, monkeypatch):
+    clock = [0.]
+    monkeypatch.setattr("actomasto.discovery.time.monotonic", lambda: clock[0])
+    monkeypatch.setattr("actomasto.discovery.MAX_DISCOVERY_SECONDS", 1)
+    original_scandir = os.scandir
+
+    def scandir(fd):
+        # The candidate has been inspected, but its descendants are not complete.
+        clock[0] = 2.
+        return original_scandir(fd)
+
+    monkeypatch.setattr(os, "scandir", scandir)
+    with pytest.raises(git_source.GitSourceError, match="^discovery_timeout$"):
+        discover([repository.path])
+
+
+def test_discovery_unreadable_descendants_cannot_leave_parent_enrollable(repository, monkeypatch):
+    repository.run("remote", "add", "origin", "https://github.com/team/public.git")
+
+    def denied(fd):
+        raise PermissionError()
+
+    monkeypatch.setattr(os, "scandir", denied)
+    assert discover([repository.path]) == [{
+        "path": str(repository.path), "origin": None, "host": None,
+        "project_path": None, "reason": "discovery_unreadable",
+    }]
+
+
+@pytest.mark.parametrize("bound", ["depth", "results"])
+def test_discovery_resource_bounds_fail_without_partial_candidates(repository, monkeypatch, bound):
+    GitFixture(repository.path / "nested")
+    monkeypatch.setattr("actomasto.discovery.MAX_DISCOVERY_DEPTH" if bound == "depth"
+                        else "actomasto.discovery.MAX_DISCOVERY_RESULTS", 1)
+    with pytest.raises(git_source.GitSourceError, match="^discovery_limit$"):
+        discover([repository.path])
+
+
+def test_discovery_cancel_stops_candidate_git_and_does_not_leak_to_collect(repository, monkeypatch):
+    commit = repository.commit({"file.txt": "fixture\n"})
+    processes = []
+    original_popen = subprocess.Popen
+
+    def launch(*args, **kwargs):
+        process = original_popen(*args, **kwargs)
+        processes.append(process)
+        return process
+
+    def cancelled():
+        if processes:
+            raise SourceCancelled()
+
+    with monkeypatch.context() as patch:
+        patch.setattr(subprocess, "Popen", launch)
+        with pytest.raises(SourceCancelled):
+            discover([repository.path], cancelled=cancelled)
+    assert len(processes) == 1 and processes[0].returncode is not None
+    assert repository.units()[0]["source_ref"] == {"commit": commit}
+
+
+def test_discovery_does_not_follow_directory_replaced_by_symlink(repository, tmp_path, monkeypatch):
+    child = repository.path / "child"
+    child.mkdir()
+    outside = GitFixture(tmp_path / "outside")
+    outside.run("remote", "add", "origin", "https://github.com/outside/private.git")
+    original_open = os.open
+
+    def open_directory(name, flags, *args, **kwargs):
+        if name == "child":
+            child.rmdir()
+            child.symlink_to(outside.path, target_is_directory=True)
+        return original_open(name, flags, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", open_directory)
+    results = discover([repository.path])
+    assert {row["path"]: row["reason"] for row in results} == {
+        str(repository.path): "missing_origin", str(child): "discovery_unreadable",
+    }
+
+
 def test_all_ref_namespaces_authors_unpushed_and_no_reflog_history(repository):
     base = repository.commit({"base.txt": "base\n"})
     branch = repository.commit({"branch.txt": "local unpushed work\n"}, parents=[base], ref="refs/heads/topic")

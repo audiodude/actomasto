@@ -5,17 +5,21 @@ from email.utils import parsedate_to_datetime
 import json
 import os
 from pathlib import Path
+import stat
 import re
 import time
 from urllib.parse import quote, unquote, urlsplit
 
 import httpx
 
+from . import git_source
 from .git_source import GitSourceError, _git
 
 HOSTS = frozenset(("github.com", "gitlab.com", "gitlab.wikimedia.org"))
 MAX_RESPONSE_BYTES = 1024 * 1024
-MAX_DISCOVERY_DIRECTORIES = 100_000
+MAX_DISCOVERY_SECONDS = 60
+MAX_DISCOVERY_DEPTH = 128
+MAX_DISCOVERY_RESULTS = 10_000
 
 
 def normalize_origin(url):
@@ -91,43 +95,104 @@ def _candidate(path):
     return result
 
 
-def discover(roots):
-    results, seen = [], set()
-    count = 0
-    for configured in roots:
-        root_input = Path(configured)
-        if not root_input.is_absolute():
-            raise ValueError("absolute_discovery_root_required")
-        # A root may be canonically configured through a symlink, but traversal
-        # beneath it never follows directory symlinks.
-        root = root_input.resolve()
-        stack = [root]
-        while stack:
-            path = stack.pop()
-            canonical = path.resolve()
-            if not canonical.is_relative_to(root) or canonical in seen:
-                continue
-            seen.add(canonical)
-            count += 1
-            if count > MAX_DISCOVERY_DIRECTORIES:
-                raise GitSourceError("discovery_limit")
+def discover(roots, cancelled=None):
+    """Enumerate exhaustively with bounded time, open handles, and result memory."""
+    results, seen = [], {}
+    deadline = time.monotonic() + MAX_DISCOVERY_SECONDS
+    stack = []
+
+    def check():
+        if time.monotonic() >= deadline:
+            raise GitSourceError("discovery_timeout")
+        if cancelled is not None:
+            cancelled()
+
+    def append(result):
+        if len(results) >= MAX_DISCOVERY_RESULTS:
+            raise GitSourceError("discovery_limit")
+        results.append(result)
+
+    def metadata(fd, name):
+        try:
+            return os.stat(name, dir_fd=fd, follow_symlinks=False)
+        except FileNotFoundError:
+            return None
+
+    def enter(path, name, parent_fd=None):
+        check()
+        if len(stack) >= MAX_DISCOVERY_DEPTH:
+            raise GitSourceError("discovery_limit")
+        fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
+        try:
+            dotgit = metadata(fd, ".git")
+            candidate = dotgit is not None and (stat.S_ISDIR(dotgit.st_mode) or stat.S_ISREG(dotgit.st_mode))
+            bare = not candidate and all(metadata(fd, name) is not None for name in ("HEAD", "objects", "refs"))
+            if candidate or bare:
+                # Traversal is anchored to no-follow directory descriptors. Before
+                # invoking Git by pathname, also reject a renamed/replaced path.
+                current = path.stat(follow_symlinks=False)
+                opened = os.fstat(fd)
+                if path.resolve() != path or (current.st_dev, current.st_ino) != (opened.st_dev, opened.st_ino):
+                    raise GitSourceError("discovery_changed")
+                result = _candidate(path)
+                check()
+                if path not in seen:
+                    append(result)
+                    seen[path] = result
+                if result["reason"] == "bare_repository":
+                    return
+            stack.append((path, fd, os.scandir(fd)))
+            fd = None
+        finally:
+            if fd is not None:
+                os.close(fd)
+
+    def unreadable(path):
+        result = {"path": str(path), "origin": None, "host": None, "project_path": None, "reason": "discovery_unreadable"}
+        if path in seen:
+            seen[path].update(result)
+        else:
+            append(result)
+            seen[path] = result
+
+    # Candidate Git subprocesses use the same deadline and cancellation boundary.
+    token = git_source._cancelled.set(check)
+    try:
+        for configured in roots:
+            check()
+            root_input = Path(configured)
+            if not root_input.is_absolute():
+                raise ValueError("absolute_discovery_root_required")
+            # Only an explicitly configured root may resolve through a symlink.
+            root = root_input.resolve()
             try:
-                with os.scandir(path) as entries:
-                    children = {entry.name: entry for entry in entries}
-                dotgit = children.get(".git")
-                candidate = dotgit is not None and not dotgit.is_symlink() and (dotgit.is_dir(follow_symlinks=False) or dotgit.is_file(follow_symlinks=False))
-                bare = "HEAD" in children and "objects" in children and "refs" in children
-                if candidate or bare:
-                    result = _candidate(canonical)
-                    results.append(result)
-                    if result["reason"] == "bare_repository":
-                        continue
-                for name, entry in children.items():
-                    if name != ".git" and entry.is_dir(follow_symlinks=False) and not entry.is_symlink():
-                        stack.append(Path(entry.path))
+                enter(root, root)
             except OSError:
-                results.append({"path": str(canonical), "origin": None, "host": None, "project_path": None, "reason": "discovery_unreadable"})
-    return sorted(results, key=lambda result: result["path"])
+                unreadable(root)
+            while stack:
+                check()
+                path, fd, entries = stack[-1]
+                try:
+                    entry = next(entries)
+                except (StopIteration, OSError) as error:
+                    if isinstance(error, OSError):
+                        unreadable(path)
+                    entries.close()
+                    os.close(fd)
+                    stack.pop()
+                    continue
+                try:
+                    if entry.name != ".git" and entry.is_dir(follow_symlinks=False):
+                        enter(path / entry.name, entry.name, fd)
+                except OSError:
+                    unreadable(path / entry.name)
+        check()
+        return sorted(results, key=lambda result: result["path"])
+    finally:
+        for _, fd, entries in stack:
+            entries.close()
+            os.close(fd)
+        git_source._cancelled.reset(token)
 
 
 def _retry_after(headers):

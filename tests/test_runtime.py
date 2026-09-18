@@ -11,6 +11,7 @@ from actomasto import cli, daemon
 from actomasto.common import SourceCancelled, terminal_safe
 from actomasto.config import ConfigError, load, save, validate
 from actomasto.store import Store
+from actomasto import discovery
 
 
 @pytest.fixture
@@ -90,6 +91,37 @@ def test_logout_suspends_without_explicit_off_interval(runtime, monkeypatch):
     app.work()
     assert not app.allowed()
     assert app.store.settings()['enabled'] and app.store.settings()['epoch'] == epoch
+
+
+@pytest.mark.parametrize("boundary", ["off", "logout", "configuration"])
+def test_scan_cancels_during_discovery_without_publishing_partial_state(runtime, tmp_path, monkeypatch, boundary):
+    app, config = runtime
+    root = tmp_path / "roots"
+    root.mkdir()
+    app.store.set_enabled(True, time.time())
+    previous = {"candidates": [], "at": 123}
+    app.store.save_cursor("discovery_status", previous)
+    clock = [0.]
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+    original_scandir = discovery.os.scandir
+
+    def scandir(fd):
+        if boundary == "off":
+            app.store.set_enabled(False, time.time())
+        elif boundary == "logout":
+            monkeypatch.setattr(daemon, "active_login", lambda: False)
+        else:
+            changed = copy.deepcopy(config)
+            changed["identity"]["author_emails"].append("new@example.invalid")
+            app.store.apply_config(changed, time.time())
+        clock[0] += 1.
+        return original_scandir(fd)
+
+    monkeypatch.setattr(discovery.os, "scandir", scandir)
+    with pytest.raises(SourceCancelled):
+        app.scan(force=True)
+    assert app.store.cursor("discovery_status") == previous
+    assert app.store.repositories() == []
 
 
 
