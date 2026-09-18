@@ -224,7 +224,7 @@ class Store:
         settings = self._settings()
         old = settings["config"]
         if old.get("version") == 2:
-            if old != config or settings.get("funes_migration") != "complete":
+            if validate(old) != config or settings.get("funes_migration") != "complete":
                 raise ConfigError("migration_already_completed")
         elif migration_config(old, config["funes"]) != config:
             raise ConfigError("migration_configuration_mismatch")

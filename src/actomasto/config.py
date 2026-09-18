@@ -6,6 +6,7 @@ import json
 import os
 import tempfile
 import tomllib
+from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -21,6 +22,7 @@ DEFAULTS = {
     'version': 2,
     'discovery': {'roots': []},
     'identity': {'author_emails': []},
+    'git': {'since': ''},
     'blocklist': {'repositories': [], 'paths': [], 'text': [], 'scoped': []},
     'funes': {'executable': '', 'corpus': '', 'scope': ''},
     'generation': {'model': 'claude-haiku-4-5-20251001', 'character_limit': 500, 'interval_minutes': 30},
@@ -70,6 +72,15 @@ def validate(value, *, legacy=False):
     if any('@' not in email.strip() or '\n' in email for email in emails):
         raise ConfigError('invalid_author_emails')
     result['identity']['author_emails'] = sorted(set(e.strip().casefold() for e in emails))
+    since = result['git']['since']
+    if not isinstance(since, str):
+        raise ConfigError('invalid_git_since')
+    if since:
+        try:
+            if date.fromisoformat(since).isoformat() != since:
+                raise ValueError
+        except ValueError:
+            raise ConfigError('invalid_git_since') from None
     for key in ('repositories', 'paths', 'text'):
         _strings(result['blocklist'][key], f'blocklist_{key}')
     scoped = result['blocklist']['scoped']

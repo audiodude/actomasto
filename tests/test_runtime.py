@@ -52,6 +52,7 @@ def test_cli_init_requires_consent_and_stays_disabled(tmp_path, monkeypatch, cap
 def test_config_round_trip_and_unknown_keys(runtime, tmp_path):
     _, config = runtime
     config['blocklist']['scoped'] = [{'repository': 'github.com/example/**', 'paths': ['private/**'], 'text': ['customer phrase']}]
+    config['git']['since'] = '2026-01-01'
     path = tmp_path / 'private-config' / 'config.toml'
     save(path, config)
     assert load(path) == config
@@ -59,6 +60,10 @@ def test_config_round_trip_and_unknown_keys(runtime, tmp_path):
     invalid = copy.deepcopy(config)
     invalid['identity']['committer_names'] = ['Someone']
     with pytest.raises(ConfigError):
+        validate(invalid)
+    invalid = copy.deepcopy(config)
+    invalid['git']['since'] = '2026-02-30'
+    with pytest.raises(ConfigError, match='invalid_git_since'):
         validate(invalid)
 
 

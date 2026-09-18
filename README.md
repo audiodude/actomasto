@@ -75,6 +75,27 @@ uv run --locked actomasto status --json
 
 `config apply` asks for hosted-processing/scope confirmation; use `--yes` only after reviewing the unchanged scope. Applying a binary-path-only change preserves enabled/off state, collection intervals, spending, history and enrollment, and makes conversation health fail closed until the new dependency is checked. Like any configuration apply, it clears a generation-error pause; review that state before proceeding. It does not implicitly enable collection with `on`. `service install` writes the unit for the new checkout's virtual-environment executable, reloads systemd and enables/starts the service; stopping first is necessary because installing over a running service does not restart its old process. Keep the checkout and its `.venv` available afterward. These commands are operator rollout instructions, not a record of a performed live update.
 
+## Git history cutoff
+
+To limit commit processing, add this to `config.toml`, then run
+`uv run --locked actomasto config apply`:
+
+```toml
+[git]
+since = "2026-01-01"
+```
+
+The cutoff is inclusive midnight UTC, using the **committer date**, not the author
+date. Omit the section or use `since = ""` for no additional cutoff. Existing
+import windows, eligibility, and privacy filters still apply; this setting does
+not import otherwise ineligible history, purge queued evidence, reset processing
+markers, or limit conversation sources.
+
+Git filters candidate IDs before Actomasto reads commit messages and diffs.
+It still walks history metadata (`--since-as-filter`) so an old-dated descendant
+cannot hide an eligible newer-dated ancestor. Parent objects needed to compute an
+eligible commit's diff may predate the cutoff.
+
 ## Privacy and controls
 
 `off`, login, budget, and revocation gates control Actomasto reads and hosted processing, **not independent Funes indexing**. Actomasto never enrolls, refreshes, semantically indexes, or remotely binds memory. `purge` deletes Actomasto drafts/evidence/pending content while preserving processing markers and spending. It does not delete original transcripts, independent corpus/enrollment/indexes, backups, or provider-held requests. Scope changes require explicit configuration apply; affected queued units are revoked. Conversation health starts closed on every restart until the current dependency and harnesses are validated.

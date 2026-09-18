@@ -297,6 +297,18 @@ def test_all_ref_namespaces_authors_unpushed_and_no_reflog_history(repository):
     assert wrong not in commits and dangling not in commits
 
 
+def test_commit_cutoff_includes_midnight_and_newer_ancestors_of_old_dated_tips(repository):
+    midnight = 1_767_225_600  # 2026-01-01T00:00:00Z; author dates remain in 2023.
+    repository.commit({"base": "before\n"}, timestamp=midnight - 1)
+    boundary = repository.commit({"boundary": "midnight\n"}, timestamp=midnight)
+    recent = repository.commit({"recent": "newer ancestor\n"}, timestamp=midnight + 86400)
+    repository.commit({"tip": "old-dated tip\n"}, timestamp=midnight - 86400)
+    units = list(git_source.collect(REPOSITORY, str(repository.path), ["author@example.test"],
+                                    lambda start, end: True, since="2026-01-01"))
+    assert [unit["source_ref"]["commit"] for unit in units] == [boundary, recent]
+    assert [unit["event_time"] for unit in units] == [midnight, midnight + 86400]
+
+
 def test_committer_time_is_authorization_time_and_future_waits(repository):
     accepted = repository.commit({"a": "a"}, timestamp=TIME + 10)
     excluded = repository.commit({"b": "b"}, timestamp=TIME + 20)

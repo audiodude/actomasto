@@ -269,7 +269,7 @@ def _unit(repo, commit, event_time):
             "items": [], "adapter": "git", "adapter_version": ADAPTER_VERSION, "partial_source": False}
 
 
-def _reachable(path):
+def _reachable(path, since):
     refs = _git(path, "for-each-ref", "--format=%(objectname) %(objecttype)",
                 "refs/heads/", "refs/remotes/", "refs/tags/")
     tips = set()
@@ -291,13 +291,16 @@ def _reachable(path):
                 tips.add(target)
     if not tips:
         return b""
-    return _git(path, "rev-list", "--reverse", "--topo-order", "--stdin",
+    # Unlike --since, this does not stop at an old-dated commit hiding a
+    # newer-dated ancestor. Git filters before per-commit content inspection.
+    cutoff = [f"--since-as-filter={since}T00:00:00Z"] if since else []
+    return _git(path, "rev-list", "--reverse", "--topo-order", *cutoff, "--stdin",
                 input_data=("\n".join(sorted(tips)) + "\n").encode())
 
 
-def collect(repo: dict, path: str, author_emails: list[str], eligible, cancelled=None):
-    """Collect with cancellation checked before source reads and unit delivery."""
-    source = _collect(repo, path, author_emails, eligible)
+def collect(repo: dict, path: str, author_emails: list[str], eligible, cancelled=None, *, since=""):
+    """Collect commits on/after a UTC date, checking cancellation before reads."""
+    source = _collect(repo, path, author_emails, eligible, since)
     while True:
         token = _cancelled.set(cancelled)
         try:
@@ -314,7 +317,7 @@ def collect(repo: dict, path: str, author_emails: list[str], eligible, cancelled
         yield unit
 
 
-def _collect(repo: dict, path: str, author_emails: list[str], eligible):
+def _collect(repo: dict, path: str, author_emails: list[str], eligible, since):
     """Yield complete units or content-free exclusion envelopes for terminal marks.
 
     Eligibility is evaluated before any diff/blob content. Unreachable and future
@@ -325,7 +328,7 @@ def _collect(repo: dict, path: str, author_emails: list[str], eligible):
         return
     if _git(path, "rev-parse", "--is-bare-repository").strip() != b"false":
         raise GitSourceError("bare_repository")
-    revisions = _reachable(path)
+    revisions = _reachable(path, since)
     local = _local_ignores(path)
     now = time.time()
     for raw_oid in revisions.splitlines():
