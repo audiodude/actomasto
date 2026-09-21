@@ -4,12 +4,12 @@ A single-user Linux service that makes evidence-grounded Mastodon **drafts**, ne
 
 ## Installation
 
-Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The tested dependency revision is `152307b3e9d34e34cc9ecc422960f2cc9971e797`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
+Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The tested dependency revision is `0c443bf8d22ec0a0a1c731681b8efefdeeb3e189`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
 
 Build Funes independently (tested with Rust 1.98.0, protoc, and lld on Linux), then use the absolute path to its `target/debug/funes`. Check out the tested revision above in a separate Funes source worktree before building; a source commit is not a published binary.
 
-The collection-repair revision is available on the maintained Funes fork's
-`fix-collection-health` branch. Fetch that branch, then check out the exact tested
+The tested revision is available on the maintained Funes fork's
+`update-local-20260921` branch. Fetch that branch, then check out the exact
 revision above before building.
 
 ```sh
@@ -149,7 +149,7 @@ succeeded. That dependency update did not repair collection. No Hugging
 Face artifacts were deployed. Update and verification assisted by OpenAI Codex.
 
 The subsequent collection repair passed 297 Funes tests and all 220 Actomasto
-tests against the revision pinned above. Full-root discovery found 221 candidates
+tests against `152307b3e9d34e34cc9ecc422960f2cc9971e797`. Full-root discovery found 221 candidates
 in 3.1 seconds, and the real `config validate` command succeeded. A metadata-only
 live sweep recognized all 511 present transcripts: 7 Claude, 17 Codex, and 487 OMP
 sources. One changing OMP source required a current-revision retry; unfinished
@@ -174,3 +174,13 @@ statuses had not yet refreshed. The live metadata sweep above verifies parser
 compatibility, not completion of that full daemon pass. Strict Clippy additionally
 reported four pre-existing `chunks_exact` warnings in Funes's inference and
 normalization code; build and regression tests passed.
+
+The September 21 refresh retains main's collection repair and UTC Git cutoff.
+`uv lock --upgrade --refresh` found no newer compatible dependencies. Locked
+environment sync, wheel/source-distribution builds, and all 221 tests passed with
+the Funes revision pinned above. Native OMP 18.2.8 completed-turn text/provenance,
+aborted-turn exclusion, restart deduplication, and unchanged originals passed
+through the real source consumer. Bridge integration evidence is recorded in
+[`dependencies-20260921.json`](https://github.com/audiodude/omp-funes-bridge/blob/update-local-20260921/verification/dependencies-20260921.json).
+No hosted-generation smoke or Hugging Face release publication was performed.
+Verification assisted by OpenAI Codex.
