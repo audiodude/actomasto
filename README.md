@@ -4,7 +4,7 @@ A single-user Linux service that makes evidence-grounded Mastodon **drafts**, ne
 
 ## Installation
 
-Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The pinned dependency revision is `b65df60b0c29256b81926962c1a13f8acee7c0ec`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
+Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The pinned dependency revision is `2e60cf8795b17379a3630c22c7f3da69679a84cd`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
 
 Build Funes independently (previous builds used Rust 1.98.0, protoc, and lld on Linux), then use the absolute path to its `target/debug/funes`. Check out the pinned revision above in a separate Funes source worktree before building; a source commit is not a published binary.
 
@@ -204,3 +204,11 @@ OMP 18.2.10-authored synthetic sessions passed exact completed-turn text and
 provenance, aborted-turn exclusion, restart deduplication, and ineligible-interval
 exclusion through the real consumer. No hosted-generation smoke or Hugging Face
 publication was performed. Verification assisted by OpenAI Codex.
+
+The September 23 refresh pins Funes
+`2e60cf8795b17379a3630c22c7f3da69679a84cd`, including upstream length-grouped
+BLAS batching. `uv lock --upgrade --refresh` found no newer compatible Python
+dependencies. The wheel/source-distribution build and CLI smoke passed; all 221
+tests passed with `FUNES_TEST_BIN` pointing at that rebuilt revision. The bridge
+also exercised OMP 18.2.11 indexing and native MCP live-reader retrieval.
+No Hugging Face release artifacts were published. AI-assisted with OpenAI Codex.
