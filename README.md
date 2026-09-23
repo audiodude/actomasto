@@ -4,7 +4,7 @@ A single-user Linux service that makes evidence-grounded Mastodon **drafts**, ne
 
 ## Installation
 
-Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The pinned dependency revision is `0c443bf8d22ec0a0a1c731681b8efefdeeb3e189`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
+Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The pinned dependency revision is `b65df60b0c29256b81926962c1a13f8acee7c0ec`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
 
 Build Funes independently (previous builds used Rust 1.98.0, protoc, and lld on Linux), then use the absolute path to its `target/debug/funes`. Check out the pinned revision above in a separate Funes source worktree before building; a source commit is not a published binary.
 
@@ -110,12 +110,12 @@ the active login, or changing configuration cancels an in-progress daemon scan.
 
 ## Verification
 
-The current dependency pin targets OMP 18.2.8 consumption through Funes source
+The current dependency pin targets OMP 18.2.10 consumption through Funes source
 protocol 1; it does not change Actomasto's Python dependencies or add an OMP
 package dependency. Historical measurements below retain their original
 revisions and do not verify this pin. Before activation, run
 `FUNES_TEST_BIN=/absolute/rebuilt/funes uv run --locked pytest -q` with an
-executable built from the pinned revision, and exercise native OMP 18.2.8
+executable built from the pinned revision, and exercise native OMP 18.2.10
 completed and aborted transcripts through `FunesSource.collect`.
 
 `FUNES_TEST_BIN=/absolute/fork/funes uv run pytest -q` exercises the real source subprocess contract. Without that explicit binary, cross-process cases skip rather than substituting a mock parser. Initial integration evidence records 210 passing tests, 32 exact pre-cutover equivalence cases, restart-safe migration, dependency outage/recovery, and an authorized synthetic Anthropic run costing $0.010623 under a $1 cap. No posts were published or live sources enrolled. Implementation assisted by OpenAI Codex.
@@ -182,3 +182,25 @@ statuses had not yet refreshed. The live metadata sweep above verifies parser
 compatibility, not completion of that full daemon pass. Strict Clippy additionally
 reported four pre-existing `chunks_exact` warnings in Funes's inference and
 normalization code; build and regression tests passed.
+
+The September 21 refresh retains main's collection repair and UTC Git cutoff.
+`uv lock --upgrade --refresh` found no newer compatible dependencies. Locked
+environment sync, wheel/source-distribution builds, and all 221 tests passed with
+Funes revision `0c443bf8d22ec0a0a1c731681b8efefdeeb3e189`. Native OMP 18.2.8 completed-turn text/provenance,
+aborted-turn exclusion, restart deduplication, and unchanged originals passed
+through the real source consumer. Bridge integration evidence is recorded in
+[`dependencies-20260921.json`](https://github.com/audiodude/omp-funes-bridge/blob/update-local-20260921/verification/dependencies-20260921.json).
+No hosted-generation smoke or Hugging Face release publication was performed.
+Verification assisted by OpenAI Codex.
+
+The stable OMP 18.2.10 refresh retains the latest fork main, the September 21
+verification record, and the later explicit Funes pin/build safeguards.
+`uv lock --upgrade` resolved 20 packages without compatible version updates;
+existing Python constraints remain unchanged. The new Funes pin changes only its
+locked `instability` dependency from 0.3.13 to 0.3.14 relative to the fork's
+previous main, retaining source protocol 1 and `actomasto-v1` identities.
+All 221 tests passed against the rebuilt pinned Funes executable. Native
+OMP 18.2.10-authored synthetic sessions passed exact completed-turn text and
+provenance, aborted-turn exclusion, restart deduplication, and ineligible-interval
+exclusion through the real consumer. No hosted-generation smoke or Hugging Face
+publication was performed. Verification assisted by OpenAI Codex.
