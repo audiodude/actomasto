@@ -131,6 +131,38 @@ def test_scan_cancels_during_discovery_without_publishing_partial_state(runtime,
 
 
 
+@pytest.mark.parametrize("boundary", ["off", "logout", "configuration"])
+def test_collection_cancels_before_checkpoint_after_control_change(runtime, monkeypatch, boundary):
+    app, config = runtime
+    app.store.set_enabled(True, time.time())
+    monkeypatch.setattr(app, 'scan', lambda **kwargs: None)
+    monkeypatch.setattr(app.store, 'repositories', lambda: [
+        {'id': 'repo', 'paths': ['/unused'], 'state': 'public', 'public_until': time.time() + 60}])
+    clock = [1.]
+    monkeypatch.setattr(daemon.time, 'monotonic', lambda: clock[0])
+
+    def interrupted(*args, cancelled, **kwargs):
+        cancelled()
+        if boundary == 'off':
+            app.store.set_enabled(False, time.time())
+        elif boundary == 'configuration':
+            changed = copy.deepcopy(config)
+            changed['identity']['author_emails'].append('new@example.invalid')
+            app.store.apply_config(changed, time.time())
+        else:
+            monkeypatch.setattr(daemon, 'active_login', lambda: False)
+            clock[0] += .2
+        cancelled()
+        pytest.fail('collection continued after the gate closed')
+        yield
+
+    monkeypatch.setattr(daemon, 'commits', interrupted)
+    with pytest.raises(SourceCancelled):
+        app.collect()
+    assert app.store.db.execute(
+        "SELECT COUNT(*) FROM source_cursors WHERE key LIKE 'git-path:%'").fetchone()[0] == 0
+
+
 def test_notification_failure_is_visible_without_loop(runtime, monkeypatch):
     app, config = runtime
     config['notifications']['enabled'] = True
