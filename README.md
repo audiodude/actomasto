@@ -4,7 +4,7 @@ A single-user Linux service that makes evidence-grounded Mastodon **drafts**, ne
 
 ## Installation
 
-Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The pinned dependency revision is `2e60cf8795b17379a3630c22c7f3da69679a84cd`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
+Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The pinned dependency revision is `c6396271a1beb3f9fb1466d1105c0a87c45db07b`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
 
 Build Funes independently (previous builds used Rust 1.98.0, protoc, and lld on Linux), then use the absolute path to its `target/debug/funes`. Check out the pinned revision above in a separate Funes source worktree before building; a source commit is not a published binary.
 
@@ -212,3 +212,14 @@ dependencies. The wheel/source-distribution build and CLI smoke passed; all 221
 tests passed with `FUNES_TEST_BIN` pointing at that rebuilt revision. The bridge
 also exercised OMP 18.2.11 indexing and native MCP live-reader retrieval.
 No Hugging Face release artifacts were published. AI-assisted with OpenAI Codex.
+
+The September 24 refresh pins Funes
+`c6396271a1beb3f9fb1466d1105c0a87c45db07b`, including upstream deterministic
+recall tie-breaking and five compatible Cargo dependency updates.
+`uv lock --upgrade --refresh` found no newer compatible Python dependencies.
+All 221 tests passed against the rebuilt executable; wheel/source-distribution
+builds and CLI smoke passed. Native OMP 18.3.0 completed/aborted turns passed
+exact text/provenance, stable identity, restart deduplication, terminal interval
+exclusion, and unchanged-original checks through the real Funes consumer.
+No hosted-generation smoke or Hugging Face publication was performed.
+Verification assisted by OpenAI Codex.
