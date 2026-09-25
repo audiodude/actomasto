@@ -127,17 +127,17 @@ run. Installing these timers does not automatically modify other applications.
 
 ## Installation
 
-Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The tested dependency revision is `152307b3e9d34e34cc9ecc422960f2cc9971e797`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
+Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The pinned dependency revision is `c6396271a1beb3f9fb1466d1105c0a87c45db07b`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
 
-Build Funes independently (tested with Rust 1.98.0, protoc, and lld on Linux), then use the absolute path to its `target/debug/funes`. Check out the tested revision above in a separate Funes source worktree before building; a source commit is not a published binary.
+Build Funes independently (previous builds used Rust 1.98.0, protoc, and lld on Linux), then use the absolute path to its `target/debug/funes`. Check out the pinned revision above in a separate Funes source worktree before building; a source commit is not a published binary.
 
-The collection-repair revision is available on the maintained Funes fork's
-`fix-collection-health` branch. Fetch that branch, then check out the exact tested
-revision above before building.
+Fetch the maintained `audiodude/funes` fork, then check out the exact pinned
+revision above before building. A branch name or previously installed executable
+does not establish that its build matches this revision.
 
 ```sh
 FUNES_SOURCE=/absolute/funes-worktree
-git -C "$FUNES_SOURCE" rev-parse HEAD # must match the tested revision above
+git -C "$FUNES_SOURCE" rev-parse HEAD # must match the pinned revision above
 CARGO_BUILD_JOBS=2 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_DEV_OPT_LEVEL=1 \
   CARGO_PROFILE_DEV_INCREMENTAL=false RUSTFLAGS="-C link-arg=-fuse-ld=lld" \
   cargo build --locked --manifest-path "$FUNES_SOURCE/Cargo.toml"
@@ -233,13 +233,21 @@ the active login, or changing configuration cancels an in-progress daemon scan.
 
 ## Verification
 
+The current dependency pin targets OMP 18.2.10 consumption through Funes source
+protocol 1; it does not change Actomasto's Python dependencies or add an OMP
+package dependency. Historical measurements below retain their original
+revisions and do not verify this pin. Before activation, run
+`FUNES_TEST_BIN=/absolute/rebuilt/funes uv run --locked pytest -q` with an
+executable built from the pinned revision, and exercise native OMP 18.2.10
+completed and aborted transcripts through `FunesSource.collect`.
+
 `FUNES_TEST_BIN=/absolute/fork/funes uv run pytest -q` exercises the real source subprocess contract. Without that explicit binary, cross-process cases skip rather than substituting a mock parser. Initial integration evidence records 210 passing tests, 32 exact pre-cutover equivalence cases, restart-safe migration, dependency outage/recovery, and an authorized synthetic Anthropic run costing $0.010623 under a $1 cap. No posts were published or live sources enrolled. Implementation assisted by OpenAI Codex.
 
 Actomasto consumes Funes source protocol 1 and its `omp-session3-schema1` capability, not the OMP extension API or an OMP package-version pin. The bridge's separately recorded [OMP 18.1.17 compatibility evidence](https://github.com/audiodude/omp-funes-bridge/blob/e50207d/verification/omp-18.1.17.json) does not replace the Actomasto measurements above, whose recorded environment used OMP 18.1.15. A native transcript schema rejected by Funes still pauses the affected harness; upgrading the bridge alone does not make that schema supported.
 
 Fresh [OMP 18.1.17 consumer verification](verification/omp-18.1.17.json) passed all 210 tests with the real pinned Funes executable. Native RPC-authored completed turns retained exact text, provenance, and identity; aborted turns remained pending. Restart replay and ineligible-interval exclusion passed. This does not certify every historical transcript: the pinned Funes normalizer rejects `session_init` in older OMP child sessions, and live Actomasto also reports unsupported Codex versions. Those parser limitations are unchanged by this compatibility update.
 
-The [September dependency refresh](verification/dependencies-20260911.json) passed all 210 tests against the rebuilt committed Funes revision above, plus native OMP 18.1.17 completed/aborted-turn consumption, exact text/provenance, restart deduplication, and interval exclusions. `uv lock --upgrade` found no newer compatible Python dependencies. The local plan commit `0a45a9b` is merged without restoring its superseded “implementation not started” status. No private transcripts, hosted generation, live service changes, publication, or deployment were used; parser limitations remain unchanged.
+The [September dependency refresh](verification/dependencies-20260911.json) passed all 210 tests against its recorded Funes revision `65b91893d2ca7be80a18ed578c392c8260559b8f`, plus native OMP 18.1.17 completed/aborted-turn consumption, exact text/provenance, restart deduplication, and interval exclusions. `uv lock --upgrade` found no newer compatible Python dependencies. The local plan commit `0a45a9b` is merged without restoring its superseded “implementation not started” status. No private transcripts, hosted generation, live service changes, publication, or deployment were used; parser limitations remain unchanged.
 
 The September 16 lock refresh (`uv lock --upgrade`) updated only `urllib3` from 2.7.0 to 2.8.0 within the existing declared constraints. Actomasto has no OMP package-version constraint to change for OMP 18.2.1: compatibility remains the source protocol/capability contract above. The older evidence files retain their original versions and are not proof of the new dependency or OMP runtime. Verify the refreshed environment and real Funes consumer before activation:
 
@@ -272,7 +280,7 @@ succeeded. That dependency update did not repair collection. No Hugging
 Face artifacts were deployed. Update and verification assisted by OpenAI Codex.
 
 The subsequent collection repair passed 297 Funes tests and all 220 Actomasto
-tests against the revision pinned above. Full-root discovery found 221 candidates
+tests against revision `152307b3e9d34e34cc9ecc422960f2cc9971e797`. Full-root discovery found 221 candidates
 in 3.1 seconds, and the real `config validate` command succeeded. A metadata-only
 live sweep recognized all 511 present transcripts: 7 Claude, 17 Codex, and 487 OMP
 sources. One changing OMP source required a current-revision retry; unfinished
@@ -297,3 +305,44 @@ statuses had not yet refreshed. The live metadata sweep above verifies parser
 compatibility, not completion of that full daemon pass. Strict Clippy additionally
 reported four pre-existing `chunks_exact` warnings in Funes's inference and
 normalization code; build and regression tests passed.
+
+The September 21 refresh retains main's collection repair and UTC Git cutoff.
+`uv lock --upgrade --refresh` found no newer compatible dependencies. Locked
+environment sync, wheel/source-distribution builds, and all 221 tests passed with
+Funes revision `0c443bf8d22ec0a0a1c731681b8efefdeeb3e189`. Native OMP 18.2.8 completed-turn text/provenance,
+aborted-turn exclusion, restart deduplication, and unchanged originals passed
+through the real source consumer. Bridge integration evidence is recorded in
+[`dependencies-20260921.json`](https://github.com/audiodude/omp-funes-bridge/blob/update-local-20260921/verification/dependencies-20260921.json).
+No hosted-generation smoke or Hugging Face release publication was performed.
+Verification assisted by OpenAI Codex.
+
+The stable OMP 18.2.10 refresh retains the latest fork main, the September 21
+verification record, and the later explicit Funes pin/build safeguards.
+`uv lock --upgrade` resolved 20 packages without compatible version updates;
+existing Python constraints remain unchanged. The new Funes pin changes only its
+locked `instability` dependency from 0.3.13 to 0.3.14 relative to the fork's
+previous main, retaining source protocol 1 and `actomasto-v1` identities.
+All 221 tests passed against the rebuilt pinned Funes executable. Native
+OMP 18.2.10-authored synthetic sessions passed exact completed-turn text and
+provenance, aborted-turn exclusion, restart deduplication, and ineligible-interval
+exclusion through the real consumer. No hosted-generation smoke or Hugging Face
+publication was performed. Verification assisted by OpenAI Codex.
+
+The September 23 refresh pins Funes
+`2e60cf8795b17379a3630c22c7f3da69679a84cd`, including upstream length-grouped
+BLAS batching. `uv lock --upgrade --refresh` found no newer compatible Python
+dependencies. The wheel/source-distribution build and CLI smoke passed; all 221
+tests passed with `FUNES_TEST_BIN` pointing at that rebuilt revision. The bridge
+also exercised OMP 18.2.11 indexing and native MCP live-reader retrieval.
+No Hugging Face release artifacts were published. AI-assisted with OpenAI Codex.
+
+The September 24 refresh pins Funes
+`c6396271a1beb3f9fb1466d1105c0a87c45db07b`, including upstream deterministic
+recall tie-breaking and five compatible Cargo dependency updates.
+`uv lock --upgrade --refresh` found no newer compatible Python dependencies.
+All 221 tests passed against the rebuilt executable; wheel/source-distribution
+builds and CLI smoke passed. Native OMP 18.3.0 completed/aborted turns passed
+exact text/provenance, stable identity, restart deduplication, terminal interval
+exclusion, and unchanged-original checks through the real Funes consumer.
+No hosted-generation smoke or Hugging Face publication was performed.
+Verification assisted by OpenAI Codex.

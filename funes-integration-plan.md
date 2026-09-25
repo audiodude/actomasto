@@ -215,9 +215,9 @@ Keep regression tests for plausible behavioral failures, not source-text wiring 
 
 ## 9. Completion record
 
-All implementation phases are complete. Runtime fork pin: `audiodude/funes@69387f12dca29c2c8e939b0d9890e5768cc2067c`, preserving upstream main changes and the prior bridge behavior in committed fork source. Actomasto's old parsers and the bridge's build-time patch were removed.
+All implementation phases are complete. The original integration used `audiodude/funes@69387f12dca29c2c8e939b0d9890e5768cc2067c`, preserving upstream main changes and the prior bridge behavior in committed fork source. Actomasto's old parsers and the bridge's build-time patch were removed. See the [installation instructions](README.md#installation) for the current runtime fork pin.
 
-Current records:
+Original integration records:
 
 - [Actomasto acceptance evidence](verification/funes-integration.json): 210 passing tests with the actual fork, 32 exact pre-cutover equivalence cases, real CLI migration/reopen checks, unchanged pending expiries, and daemon restart/outage/recovery.
 - [Bridge acceptance evidence](https://github.com/audiodude/omp-funes-bridge/blob/feat/funes-source/verification/fork-source.json): fresh pinned checkout build without patching, private metadata writes, repeatable installation/removal, indexing catch-up, and native MCP live-reader retrieval.
