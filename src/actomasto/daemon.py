@@ -202,9 +202,20 @@ class Runtime:
             return
         settings = self.store.settings()
         epoch, config = settings['epoch'], settings['config']
+        next_login_check = 0.
         def cancelled():
-            if not self.allowed() or self.store.settings()['epoch'] != epoch:
+            nonlocal next_login_check
+            current = self.store.settings()
+            if (self.stop or not current['enabled'] or current.get('budget_paused')
+                    or current.get('clock_uncertain') or current['epoch'] != epoch):
                 raise SourceCancelled()
+            # Pipe drains and commit iteration poll frequently. Keep control
+            # gates immediate, but bound logind subprocesses as discovery does.
+            now = time.monotonic()
+            if now >= next_login_check:
+                if not active_login():
+                    raise SourceCancelled()
+                next_login_check = now + .1
         repos = [r for r in self.store.repositories() if r['state'] == 'public' and r['public_until'] > time.time()]
         for repo in repos:
             complete = True
@@ -214,7 +225,8 @@ class Runtime:
                     last_unit = None
                     for unit in commits(repo, path, config['identity']['author_emails'],
                                         lambda start, end: self.store.eligible(repo['id'], start, end),
-                                        cancelled=cancelled, since=config.get('git', {}).get('since', '')):
+                                        cancelled=cancelled, since=config.get('git', {}).get('since', ''),
+                                        seen=self.store.seen):
                         if not self.accept(unit, repo, epoch):
                             return
                         last_unit = unit['id']
@@ -326,7 +338,6 @@ class Runtime:
             now = time.time()
             if command == 'status':
                 return {**self.store.status(now), 'process_running': True, 'active_login': active_login(),
-                        'sources': self.store.source_health(),
                         'funes': {client: self.store.cursor('funes-status:' + client) for client in VERSIONS}}
             if command == 'repos':
                 return {'repositories': self.store.repositories(), 'discovery': self.store.cursor('discovery_status')}

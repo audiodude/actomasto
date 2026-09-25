@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from contextlib import ExitStack
 from contextvars import ContextVar
+from itertools import islice
 import hashlib
 import json
 import os
@@ -298,9 +299,78 @@ def _reachable(path, since):
                 input_data=("\n".join(sorted(tips)) + "\n").encode())
 
 
-def collect(repo: dict, path: str, author_emails: list[str], eligible, cancelled=None, *, since=""):
-    """Collect commits on/after a UTC date, checking cancellation before reads."""
-    source = _collect(repo, path, author_emails, eligible, since)
+def _read_commit_batch(path, entries):
+    data = _git(path, "cat-file", "--batch",
+                input_data="".join(unit["source_ref"]["commit"] + "\n" for unit, _ in entries).encode(),
+                limit=sum(size + 100 for _, size in entries))
+    position = 0
+    for unit, size in entries:
+        _check_cancelled()
+        end = data.find(b"\n", position)
+        if end >= 0 and data[position:end] == f'{unit["source_ref"]["commit"]} missing'.encode():
+            raise GitSourceError("git_read_failed")
+        expected = f'{unit["source_ref"]["commit"]} commit {size}'.encode()
+        if end < 0 or data[position:end] != expected:
+            raise GitSourceError("malformed_git_metadata")
+        position = end + 1
+        raw = data[position:position + size]
+        position += size
+        if data[position:position + 1] != b"\n":
+            raise GitSourceError("malformed_git_metadata")
+        position += 1
+        yield unit, raw
+    if position != len(data):
+        raise GitSourceError("malformed_git_metadata")
+
+
+def _commit_objects(repo, path, revisions, seen):
+    # Exact IDs are sufficient for already pending/terminal commits; equivalent
+    # IDs still require content and remain the caller's responsibility.
+    revisions = iter(revisions.splitlines())
+    while batch := list(islice(revisions, 128)):
+        units = []
+        for raw_oid in batch:
+            _check_cancelled()
+            commit = raw_oid.decode("ascii")
+            if not _OID.fullmatch(commit):
+                raise GitSourceError("malformed_git_metadata")
+            unit = _unit(repo, commit, 0.)
+            if seen is None or not seen(unit):
+                units.append(unit)
+        if not units:
+            continue
+        sizes = _git(path, "cat-file", "--batch-check",
+                     input_data="".join(unit["source_ref"]["commit"] + "\n" for unit in units).encode())
+        records = sizes.splitlines()
+        if len(records) != len(units):
+            raise GitSourceError("malformed_git_metadata")
+        entries, total = [], 0
+        for unit, record in zip(units, records):
+            _check_cancelled()
+            fields = record.split()
+            if fields == [unit["source_ref"]["commit"].encode(), b"missing"]:
+                raise GitSourceError("git_read_failed")
+            if (len(fields) != 3 or fields[0] != unit["source_ref"]["commit"].encode()
+                    or fields[1] != b"commit" or not fields[2].isdigit()):
+                raise GitSourceError("malformed_git_metadata")
+            size = int(fields[2])
+            if entries and total + size > MAX_SOURCE_BYTES:
+                yield from _read_commit_batch(path, entries)
+                entries, total = [], 0
+            if size > MAX_SOURCE_BYTES:
+                # Preserve the per-commit exclusion without reading its payload
+                # or allowing one large object to exhaust the entire batch.
+                yield unit, None
+            else:
+                entries.append((unit, size))
+                total += size
+        if entries:
+            yield from _read_commit_batch(path, entries)
+
+
+def collect(repo: dict, path: str, author_emails: list[str], eligible, cancelled=None, *, since="", seen=None):
+    """Collect commits on/after a UTC date, skipping seen identities before reads."""
+    source = _collect(repo, path, author_emails, eligible, since, seen)
     while True:
         token = _cancelled.set(cancelled)
         try:
@@ -317,7 +387,7 @@ def collect(repo: dict, path: str, author_emails: list[str], eligible, cancelled
         yield unit
 
 
-def _collect(repo: dict, path: str, author_emails: list[str], eligible, since):
+def _collect(repo: dict, path: str, author_emails: list[str], eligible, since, seen):
     """Yield complete units or content-free exclusion envelopes for terminal marks.
 
     Eligibility is evaluated before any diff/blob content. Unreachable and future
@@ -331,16 +401,14 @@ def _collect(repo: dict, path: str, author_emails: list[str], eligible, since):
     revisions = _reachable(path, since)
     local = _local_ignores(path)
     now = time.time()
-    for raw_oid in revisions.splitlines():
+    for unit, raw in _commit_objects(repo, path, revisions, seen):
         _check_cancelled()
-        commit = raw_oid.decode("ascii")
-        if not _OID.fullmatch(commit):
-            raise GitSourceError("malformed_git_metadata")
+        commit = unit["source_ref"]["commit"]
         # Raw commit objects bypass mailmap, log formatting configuration and
         # signatures. Timestamp is the committer's, identity is the author's.
-        unit = _unit(repo, commit, 0.)
         try:
-            raw = _git(path, "cat-file", "commit", commit, limit=MAX_SOURCE_BYTES)
+            if raw is None:
+                raise GitSourceError("oversized_source")
             header, separator, message_bytes = raw.partition(b"\n\n")
             if not separator:
                 raise GitSourceError("malformed_git_metadata")

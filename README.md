@@ -127,13 +127,14 @@ run. Installing these timers does not automatically modify other applications.
 
 ## Installation
 
-Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The pinned dependency revision is `c6396271a1beb3f9fb1466d1105c0a87c45db07b`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
+Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The pinned dependency revision is `70de3188987cd7cc16a909803969fb8c7ad7a718`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
 
 Build Funes independently (previous builds used Rust 1.98.0, protoc, and lld on Linux), then use the absolute path to its `target/debug/funes`. Check out the pinned revision above in a separate Funes source worktree before building; a source commit is not a published binary.
 
-Fetch the maintained `audiodude/funes` fork, then check out the exact pinned
-revision above before building. A branch name or previously installed executable
-does not establish that its build matches this revision.
+Fetch the maintained `audiodude/funes` fork and check out the exact pin before
+building. This revision retains the current-source parser repair and refreshes
+compatible dependencies. A branch name or previously installed executable does
+not establish that its build matches this revision.
 
 ```sh
 FUNES_SOURCE=/absolute/funes-worktree
@@ -218,6 +219,15 @@ Git filters candidate IDs before Actomasto reads commit messages and diffs.
 It still walks history metadata (`--since-as-filter`) so an old-dated descendant
 cannot hide an eligible newer-dated ancestor. Parent objects needed to compute an
 eligible commit's diff may predate the cutoff.
+
+Collection skips already pending or terminally processed commit identities before
+reading their objects. Remaining raw commit objects are read in bounded batches,
+so large non-author histories do not spawn one Git process per commit. All
+reachable IDs are still reconsidered: newly reachable older commits are not lost
+behind a timestamp checkpoint. Author matching ignores mailmaps, and existing
+eligibility and content filters are unchanged. Collection checks control state
+immediately and polls logind at most every 100 ms while draining sources; enqueue
+and generation boundaries still recheck login directly.
 
 ## Privacy and controls
 
@@ -345,4 +355,50 @@ builds and CLI smoke passed. Native OMP 18.3.0 completed/aborted turns passed
 exact text/provenance, stable identity, restart deduplication, terminal interval
 exclusion, and unchanged-original checks through the real Funes consumer.
 No hosted-generation smoke or Hugging Face publication was performed.
+Verification assisted by OpenAI Codex.
+
+### Collector progress and current-source repair
+
+The Git collector now skips durable identities before object reads and batches
+unseen raw commits. A real 25,627-commit history scan with no eligible content
+completed in 1.62 seconds; the previous implementation was still reading its
+644th commit after 15 seconds. A full collector pass on a disposable copy of
+local state completed in 37.68 seconds without invoking generation.
+
+The pinned Funes repair supports Claude 2.1.280, Codex image-view and
+function-call-output bookkeeping, and OMP upstream-model/credential metadata.
+These records do not become evidence or weaken provenance gates. `status --json`
+reports current conversation diagnostics under `funes`; the obsolete `sources`
+summary of pre-migration adapter checkpoints has been removed. Historical events
+and durable processing markers remain intact.
+
+Missing-original tombstones still require restored originals or an explicitly
+authorized, backed-up independent inventory rebuild. An inventory rebuild does
+not reset Actomasto's history, spending, exclusions, drafts, or deduplication.
+Changing originals can still produce transient `source_changed` errors rather
+than mixed-revision evidence. Repair and verification assisted by OpenAI Codex.
+
+Verification against the committed parser build passed all 226 Actomasto tests
+and 314 Funes library/binary/normalizer tests. Live activation after the authorized
+inventory rebuild recovered all three adapters with current coverage: 9 Claude
+and 22 Codex streams complete, plus 495 complete and 46 incomplete OMP streams.
+Incomplete turns remain pending. Cutover checks preserved controls, enrollment,
+collection intervals, spending, drafts, evidence, and existing terminal markers.
+No manual hosted-generation smoke or release publication was performed.
+
+### September 25 dependency and runtime refresh
+
+The updated runtime combines current personal briefings with the deployed
+collector-progress repair and pins Funes
+`70de3188987cd7cc16a909803969fb8c7ad7a718`. Twelve compatible Cargo dependencies
+were refreshed; `uv lock --upgrade --refresh` found no newer Python versions
+within the existing constraints. All 379 tests passed against the rebuilt Funes
+binary, and wheel/source-distribution builds and CLI smoke passed.
+
+Local activation preserved enrollment, collection intervals, spending, attempts,
+suggestions, evidence, terminal markers, and pending identities/expiries.
+Configuration apply re-filtered pending payloads under the merged policy.
+The collector and source-refresh runtime were restarted; daily and weekly
+briefing units now use the same updated environment, without sending an
+unscheduled briefing. No Hugging Face release artifacts were published.
 Verification assisted by OpenAI Codex.

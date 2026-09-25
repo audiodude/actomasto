@@ -816,34 +816,6 @@ class Store:
         with self._transaction():
             self.db.execute("INSERT INTO source_cursors VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, _json(value)))
 
-    @_locked
-    def source_health(self):
-        """Summarize stream checkpoints without exposing paths or transcript metadata."""
-        result = {}
-        for key, value in self.db.execute(
-                "SELECT key,value FROM source_cursors WHERE key LIKE 'adapter-stream:%' ORDER BY key"):
-            client = key.split(":", 2)[1]
-            if client not in ("claude", "codex", "omp"):
-                continue
-            state = json.loads(value)
-            summary = result.setdefault(client, {"streams": 0, "pending_turns": 0,
-                                                 "quarantined_streams": 0, "errors": []})
-            summary["streams"] += 1
-            pending = state.get("pending_turns", 0)
-            if type(pending) is int and pending > 0:
-                summary["pending_turns"] += pending
-            summary["quarantined_streams"] += int(bool(state.get("quarantine")))
-            for field in ("quarantine", "error"):
-                code = state.get(field)
-                if not code:
-                    continue
-                if not isinstance(code, str) or not re.fullmatch(r"[a-z_]{1,60}", code):
-                    code = "source_error"
-                if code not in summary["errors"]:
-                    summary["errors"].append(code)
-        for summary in result.values():
-            summary["errors"].sort()
-        return result
 
     @_locked
     def list_suggestions(self, repo=None, since=None, limit=20):

@@ -508,25 +508,6 @@ def test_source_root_change_discards_only_affected_pending_units(opened):
     assert not store.enqueue(claude, NOW + 2)
 
 
-def test_source_health_summarizes_streams_without_private_metadata(opened):
-    store, root, config = opened
-    store.save_cursor("adapter-stream:claude:private-path", {
-        "pending_turns": 2, "context": {"cwd": "/private/project"},
-        "quarantine": "malformed_record"})
-    store.save_cursor("adapter-stream:claude:another-private-path", {
-        "pending_turns": 1, "error": "unsupported_version"})
-    store.save_cursor("adapter-stream:codex:private-path", {
-        "pending_turns": 0, "error": "/private/failure.log"})
-    store.save_cursor("adapter-unit:claude:unit", {"reason": "collected"})
-    store.save_cursor("discovery_status", {"candidates": ["/private/project"]})
-    assert store.source_health() == {
-        "claude": {"streams": 2, "pending_turns": 3, "quarantined_streams": 1,
-                   "errors": ["malformed_record", "unsupported_version"]},
-        "codex": {"streams": 1, "pending_turns": 0, "quarantined_streams": 0,
-                  "errors": ["source_error"]},
-    }
-
-
 def test_exact_funes_migration_preserves_lifecycle_and_repairs_config_after_crash(tmp_path, monkeypatch):
     import hashlib
     import sqlite3

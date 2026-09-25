@@ -12,6 +12,7 @@ import pytest
 from actomasto.discovery import discover, normalize_origin, verify
 from actomasto import git_source
 from actomasto.common import SourceCancelled
+from actomasto.store import Store
 
 REPOSITORY = {"id": "github.com:123", "display_path": "github.com/example/project"}
 TIME = 1_700_000_000
@@ -309,6 +310,82 @@ def test_commit_cutoff_includes_midnight_and_newer_ancestors_of_old_dated_tips(r
     assert [unit["event_time"] for unit in units] == [midnight, midnight + 86400]
 
 
+def test_seen_commits_are_not_reread_and_newly_reachable_old_commits_are_collected(repository, tmp_path, monkeypatch):
+    accepted = repository.commit({"code.txt": "already processed\n"}, timestamp=TIME + 100)
+    blocked = repository.commit({".env": "PRIVATE=fixture\n"}, timestamp=TIME + 200)
+    old = repository.commit({"old.txt": "newly reachable old work\n"}, parents=[accepted],
+                            timestamp=TIME + 10, ref=None)
+    store = Store(tmp_path / "collector-state")
+    try:
+        initial = repository.units()
+        assert {unit["source_ref"]["commit"] for unit in initial} == {accepted, blocked}
+        for unit in initial:
+            store.mark(unit, unit.get("exclusion_reason", "processed"))
+        original = git_source._git
+
+        def no_processed_content(path, *args, **kwargs):
+            if args[0] == "cat-file":
+                requested = set(kwargs.get("input_data", b"").decode().splitlines())
+                requested.update(args[1:])
+                assert requested.isdisjoint({accepted, blocked})
+            if args[0] == "diff-tree":
+                assert accepted not in args and blocked not in args
+            return original(path, *args, **kwargs)
+
+        monkeypatch.setattr(git_source, "_git", no_processed_content)
+        assert list(git_source.collect(REPOSITORY, str(repository.path), ["author@example.test"],
+                                       lambda *args: True, seen=store.seen)) == []
+        repository.run("update-ref", "refs/remotes/origin/old-work", old)
+        unit, = git_source.collect(REPOSITORY, str(repository.path), ["author@example.test"],
+                                   lambda *args: True, since="2023-11-14", seen=store.seen)
+        assert unit["source_ref"] == {"commit": old}
+        assert unit["event_time"] == TIME + 10
+        assert any("newly reachable old work" in item["text"] for item in unit["items"])
+        store.mark(unit, "processed")
+        assert list(git_source.collect(REPOSITORY, str(repository.path), ["author@example.test"],
+                                       lambda *args: True, seen=store.seen)) == []
+    finally:
+        store.close()
+
+
+def test_non_author_history_is_batched_and_mailmap_cannot_change_author_identity(repository, monkeypatch):
+    for index in range(20):
+        repository.commit({}, email="outsider@example.test", message=f"Other author's change {index}")
+    accepted = repository.commit({}, message="Authored work")
+    mailmap = repository.path / ".mailmap"
+    mailmap.write_text("Fixture Author <author@example.test> <outsider@example.test>\n"
+                       "Other Author <outsider@example.test> <author@example.test>\n")
+    repository.run("config", "mailmap.file", str(mailmap))
+    repository.run("config", "log.mailmap", "true")
+    launches = []
+    original = subprocess.Popen
+
+    def launch(command, *args, **kwargs):
+        if "cat-file" in command:
+            launches.append(command)
+        return original(command, *args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "Popen", launch)
+    unit, = repository.units()
+    assert unit["source_ref"] == {"commit": accepted}
+    assert unit["items"][0]["text"] == "Authored work"
+    assert len(launches) < 10  # Not one subprocess for each non-author commit.
+
+
+def test_commit_batches_preserve_framing_and_isolate_oversized_objects(repository, monkeypatch):
+    message = "Batch framing\n\n" + "a" * 40 + " commit 12\n" + "x" * 500
+    first = repository.commit({}, message=message)
+    oversized = repository.commit({}, message="y" * 1500)
+    last = repository.commit({}, message="Last bounded message\n\n" + "z" * 500)
+    monkeypatch.setattr(git_source, "MAX_SOURCE_BYTES", 1024)
+    units = repository.units()
+    assert [unit["source_ref"]["commit"] for unit in units] == [first, oversized, last]
+    assert units[0]["items"][0]["text"] == message
+    assert units[1]["exclusion_reason"] == "oversized_source"
+    assert units[1]["items"] == [] and units[1]["paths"] == []
+    assert units[2]["items"][0]["text"] == "Last bounded message\n\n" + "z" * 500
+
+
 def test_committer_time_is_authorization_time_and_future_waits(repository):
     accepted = repository.commit({"a": "a"}, timestamp=TIME + 10)
     excluded = repository.commit({"b": "b"}, timestamp=TIME + 20)
@@ -419,7 +496,7 @@ def test_oversized_commit_is_content_free_and_terminal(repository, monkeypatch):
 
 
 @pytest.mark.parametrize("code, operation", [
-    ("git_timeout", ("cat-file", "commit")),
+    ("git_timeout", ("cat-file", "--batch")),
     ("git_unavailable", ("ls-tree",)),
     ("git_read_failed", ("cat-file", "blob")),
 ])
