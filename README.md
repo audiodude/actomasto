@@ -127,7 +127,7 @@ run. Installing these timers does not automatically modify other applications.
 
 ## Installation
 
-Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The pinned dependency revision is `70de3188987cd7cc16a909803969fb8c7ad7a718`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
+Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The pinned dependency revision is `c27917ac833c34b9f5b7f39e397efc56f6d59899`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
 
 Build Funes independently (previous builds used Rust 1.98.0, protoc, and lld on Linux), then use the absolute path to its `target/debug/funes`. Check out the pinned revision above in a separate Funes source worktree before building; a source commit is not a published binary.
 
@@ -390,7 +390,7 @@ No manual hosted-generation smoke or release publication was performed.
 
 The updated runtime combines current personal briefings with the deployed
 collector-progress repair and pins Funes
-`70de3188987cd7cc16a909803969fb8c7ad7a718`. Twelve compatible Cargo dependencies
+`c27917ac833c34b9f5b7f39e397efc56f6d59899`. Twelve compatible Cargo dependencies
 were refreshed; `uv lock --upgrade --refresh` found no newer Python versions
 within the existing constraints. All 379 tests passed against the rebuilt Funes
 binary, and wheel/source-distribution builds and CLI smoke passed.
@@ -402,3 +402,9 @@ The collector and source-refresh runtime were restarted; daily and weekly
 briefing units now use the same updated environment, without sending an
 unscheduled briefing. No Hugging Face release artifacts were published.
 Verification assisted by OpenAI Codex.
+
+The final Funes pin also accepts strictly validated assistant `requestControls`
+replay metadata without exposing it as evidence. Live activation exposed this
+pre-existing parser gap; the previously rejected source returned complete after
+repair. All 379 consumer tests and the bridge's native MCP live-reader probe
+passed again against the repaired executable.
