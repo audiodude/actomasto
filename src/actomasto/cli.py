@@ -13,11 +13,14 @@ from .common import control, locations, secure_dir, terminal_safe, timestamp, wr
 from .config import CONSENT, ConfigError, load, local_timezone, migration_config, save, scope_fingerprints, scope_roots, validate
 from .funes_source import SourceError
 from .store import Store
+from .briefings import BriefingError
 
 
 def parser():
     p = argparse.ArgumentParser(prog='actomasto')
     commands = p.add_subparsers(dest='command', required=True)
+    from .briefings import add_parser
+    add_parser(commands)
     init = commands.add_parser('init')
     init.add_argument('--root', action='append', required=True)
     init.add_argument('--author-email', action='append', required=True)
@@ -142,6 +145,9 @@ def main(argv=None):
     args = parser().parse_args(argv)
     try:
         paths = locations()
+        if args.command == 'briefing':
+            from .briefings import execute as execute_briefing
+            return execute_briefing(args)
         if args.command == 'daemon':
             from .daemon import run
             run()
@@ -210,6 +216,9 @@ def main(argv=None):
         print(json.dumps(result if getattr(args, 'json', False) else terminal_safe(result), ensure_ascii=False,
                          indent=None if getattr(args, 'json', False) else 2))
         return 0
+    except BriefingError as error:
+        print(json.dumps({'error': str(error), 'component': 'briefing'}), file=sys.stderr)
+        return 1
     except SourceError as error:
         print(json.dumps({'error': error.code, 'component': 'funes'}), file=sys.stderr)
         return 1

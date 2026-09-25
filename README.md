@@ -1,6 +1,129 @@
 # Actomasto
 
-A single-user Linux service that makes evidence-grounded Mastodon **drafts**, never posts. It combines eligible committed Git activity with complete conversation turns from an independently managed local [audiodude/funes](https://github.com/audiodude/funes) corpus. Hosted generation sends eligible filtered evidence to Anthropic; filtering cannot guarantee confidentiality.
+A single-user Linux service for evidence-grounded Mastodon **drafts**, never posts, and independent personal email briefings. Draft collection combines eligible committed Git activity with complete conversation turns from an independently managed local [audiodude/funes](https://github.com/audiodude/funes) corpus. Hosted generation sends filtered evidence to Anthropic; filtering cannot guarantee confidentiality.
+
+## Personal briefings
+
+`actomasto briefing` runs without OpenClaw. It has separate configuration,
+consent, scheduling, spending and private archives; it never enables or changes
+the Mastodon draft collector. **`actomasto off` controls draft collection, not
+briefings.** Disable briefing timers separately with `briefing service disable`,
+and set `hosted_processing` to `false` to prohibit manual hosted generation too.
+
+- **Daily:** the preceding local calendar day, plus at most two projects worth
+  reopening. Resurfacing requires personal activity more than seven and less
+  than thirty calendar days ago and an unfinished-work reason beyond age.
+- **Weekly:** the preceding seven complete local days and decision continuity;
+  rejected, deferred and speculative ideas remain distinct from accepted work.
+- **Re-entry:** one named project, its last recorded work, available decisions
+  and a supported next action. Unlike daily/weekly collection, selected project
+  history can predate thirty days, within the same bounded read limits.
+
+Reports synthesize concise prose with numbered citations. Decisions, intentions
+and next steps require supporting user evidence; model proposals are labelled
+**New suggestion**, never silently turned into your plans. Summaries and semantic
+decision classification remain model judgments, not independently verified
+outcomes. The private archive retains supporting excerpts and source references.
+
+Source and output filtering stays offline. Entropy detectors apply their numeric
+thresholds rather than treating every quoted word as a secret; ordinary quoted
+titles survive, while credentials and high-entropy tokens remain filtered.
+
+Create `${XDG_CONFIG_HOME:-$HOME/.config}/actomasto/briefings.json`:
+
+```json
+{
+  "version": 1,
+  "roots": ["/home/you/code"],
+  "author_emails": ["you@example.com"],
+  "timezone": "America/Los_Angeles",
+  "remote_hosts": [],
+  "blocklist": {"repositories": [], "paths": [], "text": []},
+  "hosted_processing": true,
+  "monthly_usd": "5.00",
+  "mailgun": {
+    "domain": "mail.example.com",
+    "sender": "reports@example.com",
+    "recipient": "you@example.com",
+    "region": "US"
+  }
+}
+```
+
+Use your actual paths, verified Git author emails and Mailgun domain. Setting
+`hosted_processing: true` authorizes sending filtered evidence from this
+explicit scope to Anthropic. Keep the configuration directory private (0700)
+and configuration/credential files 0600. Mailgun can be omitted for local
+previews; `region` accepts `US` or `EU`. Do not put credentials in this JSON,
+command arguments or the repository.
+
+The runtime reads `ANTHROPIC_API_KEY` and `MAILGUN_API_KEY` from the environment
+or private `briefing-credentials.env` in the same configuration directory,
+using `NAME=value` lines. It can also reuse the existing collector's
+`credentials.env` for Anthropic. Credentials are sent only to the fixed
+Anthropic/Mailgun HTTPS endpoints; redirects and environment proxies are disabled.
+
+Optional source settings:
+
+- `remote_hosts`: entries such as
+  `{"name":"your-mac.local","root":"~/code"}`. Uses BatchMode SSH, existing trusted
+  host keys, remote Python 3 and Git; installs nothing on the remote host.
+- `inventory_db`: absolute path to an existing code-inventory SQLite database.
+  This is read-only discovery context. Cached enrichment, mtimes and upstream
+  commit dates never establish personal activity or accepted intentions.
+- `funes`: the existing `{executable, corpus, scope}` paths, plus
+  `conversation_harnesses`: an explicit subset of `["claude","codex","omp"]`.
+  This separately opts those already-enrolled sources into briefing reads; it
+  neither edits enrollment nor refreshes the corpus. Complete validated turns
+  can contribute investigations and decisions without commits. Missing, stale,
+  unsupported or bounded sources are disclosed; incomplete turns are not used.
+
+```sh
+uv run --locked actomasto briefing validate
+uv run --locked actomasto briefing run daily --dry-run   # local evidence only
+uv run --locked actomasto briefing run daily             # generate/archive; no email
+uv run --locked actomasto briefing run weekly
+uv run --locked actomasto briefing run reentry --project my-project
+uv run --locked actomasto briefing test-delivery         # Mailgun test mode; no delivery
+uv run --locked actomasto briefing run daily --send
+uv run --locked actomasto briefing status
+uv run --locked actomasto briefing show daily-2026-09-24
+uv run --locked actomasto briefing service install
+```
+
+`--project` also accepts a canonical identity such as
+`git:github.com/owner/repository`; ambiguous names fail rather than picking a
+checkout. `--date YYYY-MM-DD` is the report's delivery date, not its recap date;
+daily/weekly evidence availability is still bounded by the live collection
+window. `--json` returns the complete archived result. `--dry-run` never calls
+the model or sends mail, and cannot be combined with `--send`.
+
+The two user timers run **daily at 06:00** and **Monday at 06:15** in the configured
+timezone. They do not wake a sleeping/offline machine or replay missed runs.
+The installed units refer to this checkout's virtual-environment executable:
+keep it available and reinstall the briefing service after moving the checkout.
+Disabling timers preserves reports and spending records and stops future starts.
+To cancel an in-flight run, also stop its `actomasto-briefing-daily.service` or
+`actomasto-briefing-weekly.service` with `systemctl --user stop`. Each run uses
+the configuration loaded when it started.
+
+Generation uses pinned Claude Haiku 4.5, a 24 KB selected-evidence bound,
+64 KB whole-request bound and 3,000 output-token cap. Each attempt reserves
+$0.10 against a separate monthly budget, then charges known token usage.
+Failures with uncertain usage keep that reservation. Reports are archived under
+`${XDG_DATA_HOME:-$HOME/.local/share}/actomasto/briefings/`.
+
+One report is generated per mode/date/project key. Repeated runs reuse its
+archive, not another model request. Configuration changes invalidate reuse.
+Before sending, the runtime durably records the attempt: accepted, rejected,
+unknown or interrupted sends are **not automatically repeated**. Inspect
+`briefing status` after failures before any deliberate recovery. Mailgun
+acceptance does not establish inbox delivery. Archives contain private filtered
+evidence; the collector's `purge` command does not delete briefing archives.
+
+When migrating from another scheduler, verify a generated preview and
+`test-delivery` first, then disable the old report job before its next scheduled
+run. Installing these timers does not automatically modify other applications.
 
 ## Installation
 

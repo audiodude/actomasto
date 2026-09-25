@@ -68,6 +68,7 @@ def test_service_account_schema_is_sensitive_even_with_innocent_filename():
     "password: 'synthetic value'",
     "access_token=synthetic-unquoted",
     "d7Pz4xQ9rT2vB8nK5mY1aC6hE3sF0uLw",
+    "'0123456789abcdef'",
 ])
 def test_mandatory_secret_formats_redact_and_revalidation_is_idempotent(secret_text):
     policy = Policy({})
@@ -118,6 +119,13 @@ def test_generated_secrets_paths_and_blocklisted_text_reject_whole_output():
         with pytest.raises(PolicyError):
             policy.output(text, "github.com/demo/public")
     assert policy.output("I fixed cache invalidation.", "github.com/demo/public") == "I fixed cache invalidation."
+
+
+def test_ordinary_quoted_prose_survives_filtering_and_output_validation():
+    text = """Added song 'Ronny' and changed state to "ready"."""
+    policy = Policy({})
+    assert policy.filter(unit(text))["items"][0]["text"] == text
+    assert policy.output(text, "github.com/demo/public") == text
 
 
 def test_empty_rules_are_rejected_not_universal_matches():

@@ -8,7 +8,9 @@ import re
 from collections import Counter
 from pathlib import PurePosixPath
 
-POLICY_VERSION = "1:detect-secrets-1.5.0"
+from detect_secrets.plugins.high_entropy_strings import HighEntropyStringsPlugin
+
+POLICY_VERSION = "2:detect-secrets-1.5.0"
 MAX_UNIT_BYTES = 32 * 1024 * 1024
 SECRET = "[REDACTED_SECRET]"
 PATH = "[REDACTED_PATH]"
@@ -130,10 +132,17 @@ class Policy:
             values = set()
             for line in text.splitlines():
                 for plugin in plugins:
-                    values.update(plugin.analyze_string(line))
+                    # Entropy plugins enumerate quoted candidates here; their
+                    # pure entropy threshold normally runs in analyze_line.
+                    # Apply it locally without invoking network-capable scans.
+                    for value in plugin.analyze_string(line):
+                        if not isinstance(value, str) or not value:
+                            raise PolicyError("detector_failure")
+                        if (isinstance(plugin, HighEntropyStringsPlugin)
+                                and plugin.calculate_shannon_entropy(value) <= plugin.entropy_limit):
+                            continue
+                        values.add(value)
             for value in values:
-                if not isinstance(value, str) or not value:
-                    raise PolicyError("detector_failure")
                 spans.extend((m.start(), m.end()) for m in re.finditer(re.escape(value), text))
             merged = []
             markers = [(m.start(), m.end()) for m in re.finditer(r"\[REDACTED_(?:SECRET|PATH)\]", text)]
