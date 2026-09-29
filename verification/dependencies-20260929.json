@@ -1,0 +1,60 @@
+{
+  "date": "2026-09-29",
+  "assistance": "OpenAI Codex",
+  "preserved_actomasto_revision": "3128121",
+  "main_pull": "git pull --ff-only origin main: already up to date",
+  "omp": {
+    "version": "18.4.3",
+    "revision": "820f843c7012ea6a066797cad3c40f1e83565ecb",
+    "native_fixture_directory": "/tmp/omp-update-20260929-TxJos1"
+  },
+  "python": {
+    "version": "3.13.12",
+    "dependency_refresh": "uv lock --upgrade --refresh: no newer compatible versions",
+    "environment": "uv sync --locked: passed",
+    "build": "uv build: wheel and source distribution succeeded",
+    "cli_smoke": "uv run --locked actomasto --help: passed",
+    "isolated_daemon": {
+      "ready": true,
+      "process_running": true,
+      "enabled": false,
+      "clean_sigterm_exit": true,
+      "live_state_accessed": false
+    }
+  },
+  "funes": {
+    "revision": "eb7babe7ee251e232c5088dd0b99953c72efe43b",
+    "binary_sha256": "ca5a98f08dff42b4f7cabc70d003f5c5da4d691498e3880df6728815066345d8",
+    "capabilities": "source protocol 1, actomasto-v1, omp-session3-schema1; exact build revision verified"
+  },
+  "tests": {
+    "command": "FUNES_TEST_BIN=/absolute/pinned/funes uv run --locked pytest -q",
+    "passed": 379,
+    "failed": 0,
+    "skipped": 0
+  },
+  "native_consumer": [
+    {
+      "kind": "complete",
+      "sha256": "3a7270775a6bcccde033161c3e4c08d817d6e4439d9241ad74c7ea270df67b35",
+      "units": 1,
+      "pending_turns": 0,
+      "exact_text_provenance_identity": true,
+      "replay_and_terminal_exclusion": true,
+      "original_unchanged": true
+    },
+    {
+      "kind": "aborted",
+      "sha256": "4bd957d56659c22e3e518bfc12c5c183792c60b8d5b33c18d8ab11f0735da9cb",
+      "units": 0,
+      "pending_turns": 1,
+      "original_unchanged": true
+    }
+  ],
+  "scope": {
+    "hosted_generation": false,
+    "hugging_face_publication": false,
+    "live_service_changes": false,
+    "live_enrollment_changes": false
+  }
+}

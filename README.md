@@ -127,7 +127,7 @@ run. Installing these timers does not automatically modify other applications.
 
 ## Installation
 
-Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The pinned dependency revision is `c27917ac833c34b9f5b7f39e397efc56f6d59899`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
+Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The pinned dependency revision is `eb7babe7ee251e232c5088dd0b99953c72efe43b`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
 
 Build Funes independently (previous builds used Rust 1.98.0, protoc, and lld on Linux), then use the absolute path to its `target/debug/funes`. Check out the pinned revision above in a separate Funes source worktree before building; a source commit is not a published binary.
 
@@ -243,12 +243,12 @@ the active login, or changing configuration cancels an in-progress daemon scan.
 
 ## Verification
 
-The current dependency pin targets OMP 18.2.10 consumption through Funes source
+The current dependency pin targets OMP 18.4.3 consumption through Funes source
 protocol 1; it does not change Actomasto's Python dependencies or add an OMP
 package dependency. Historical measurements below retain their original
 revisions and do not verify this pin. Before activation, run
 `FUNES_TEST_BIN=/absolute/rebuilt/funes uv run --locked pytest -q` with an
-executable built from the pinned revision, and exercise native OMP 18.2.10
+executable built from the pinned revision, and exercise native OMP 18.4.3
 completed and aborted transcripts through `FunesSource.collect`.
 
 `FUNES_TEST_BIN=/absolute/fork/funes uv run pytest -q` exercises the real source subprocess contract. Without that explicit binary, cross-process cases skip rather than substituting a mock parser. Initial integration evidence records 210 passing tests, 32 exact pre-cutover equivalence cases, restart-safe migration, dependency outage/recovery, and an authorized synthetic Anthropic run costing $0.010623 under a $1 cap. No posts were published or live sources enrolled. Implementation assisted by OpenAI Codex.
@@ -408,3 +408,22 @@ replay metadata without exposing it as evidence. Live activation exposed this
 pre-existing parser gap; the previously rejected source returned complete after
 repair. All 379 consumer tests and the bridge's native MCP live-reader probe
 passed again against the repaired executable.
+
+### September 29 dependency and runtime refresh
+
+The update preserves the deployed collector repairs and personal briefings and
+pins Funes `eb7babe7ee251e232c5088dd0b99953c72efe43b`.
+`uv lock --upgrade --refresh` found no newer Python dependency versions within
+the existing constraints. The locked Python 3.13.12 environment, wheel and
+source-distribution builds, and CLI help smoke passed. All 379 tests passed
+against the exact pinned executable.
+
+The [September 29 verification](verification/dependencies-20260929.json) also
+records a real isolated daemon reaching readiness, answering CLI status while
+disabled, and exiting cleanly. Native OMP 18.4.3 completed and aborted transcripts
+passed `FunesSource.collect`: complete-turn text, provenance, stable identity,
+restart deduplication and terminal interval exclusion were preserved; the
+aborted turn remained pending. Neither original transcript changed.
+These checks did not mutate live enrollment or services, invoke hosted
+generation, or publish Hugging Face artifacts. Update and verification assisted
+by OpenAI Codex.
