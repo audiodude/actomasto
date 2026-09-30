@@ -1,0 +1,84 @@
+{
+  "date": "2026-09-30",
+  "assistance": "OpenAI Codex",
+  "preserved_actomasto_revision": "d09590c",
+  "main_pull": "Both clean main roots: git pull --ff-only origin main, already up to date",
+  "python": {
+    "version": "3.13.12",
+    "dependency_refresh": "uv lock --upgrade --refresh: no newer compatible versions",
+    "environment": "uv sync --locked: passed",
+    "build": "uv build: wheel and source distribution succeeded",
+    "cli_smoke": "uv run --locked actomasto --help: passed",
+    "tests": {"passed": 379, "failed": 0, "skipped": 0},
+    "test_command": "FUNES_TEST_BIN=/absolute/pinned/funes uv run --locked pytest -q",
+    "isolated_daemon": {
+      "ready": true,
+      "process_running": true,
+      "enabled": false,
+      "clean_sigterm_exit": true,
+      "live_state_accessed": false
+    }
+  },
+  "funes": {
+    "revision": "116500583749fc70c31084d514f8007c61d88d6d",
+    "preserved_revision": "eb7babe7ee251e232c5088dd0b99953c72efe43b",
+    "upstream_main": "86fb8e1",
+    "branch": "update-all-20260930",
+    "binary_sha256": "8221f49d7c5252923432d80ce09e2bca7f891acea0ce301bea171dd39b61168d",
+    "capabilities": "source protocol 1, actomasto-v1, omp-session3-schema1; exact build revision verified",
+    "dependency_updates": ["async-compression 0.4.48 -> 0.4.49", "compression-codecs 0.4.43 -> 0.4.44"],
+    "rust_version": "1.98.1",
+    "build": "cargo build --locked; default BLAS, jobs=2, dev opt-level=1, debug=0, incremental=false, lld",
+    "format": "cargo fmt --check: passed",
+    "clippy_default": "cargo clippy --locked --all-targets -- -D warnings: passed",
+    "clippy_onnx": "cargo clippy --locked --all-targets --no-default-features --features onnx -- -D warnings: passed",
+    "tests": {
+      "command": "cargo test --locked --all-targets -- --test-threads=1",
+      "reported_passes": 350,
+      "failed": 0,
+      "live_hub_early_returns": 5,
+      "note": "HF_FUNES_TEST_TOKEN was empty. Five live Hub cases returned early; no remote publication or remote-memory verification is claimed."
+    },
+    "installer": "sh scripts/test-install.sh: passed",
+    "test_isolation": "Inherited integration-update regressions now block GitHub HTTPS through unreachable loopback proxies as well as HF_ENDPOINT; isolated Expect runtime supplied outside the system installation.",
+    "tag_preservation": "Upstream v1.4.0 conflicted with an existing local tag. Existing tag was preserved; upstream main fetched with --no-tags."
+  },
+  "source_smoke": {
+    "harnesses": ["claude", "codex", "omp"],
+    "exact_text_and_provenance": true,
+    "restart_deduplication": true,
+    "originals_unchanged": true,
+    "omp_aborted_pending": true
+  },
+  "omp": {
+    "version": "18.4.4",
+    "revision": "c686be0c51b8d82293db1dbd308e11910482312a",
+    "native_fixture_directory": "/tmp/omp-stack-18.4.4-Sz1ITS",
+    "fixture_authoring": "Integration owner supplied native completed and aborted lifecycle transcripts; consumer checks below were executed against the exact Funes pin."
+  },
+  "native_consumer": [
+    {
+      "kind": "complete",
+      "sha256": "14dec881c03587bf69c6a482126e938f2dc0d545b0cf3fbdb31528cb9d933214",
+      "units": 1,
+      "pending_turns": 0,
+      "exact_text_provenance_identity": true,
+      "restart_and_terminal_exclusion": true,
+      "original_unchanged": true
+    },
+    {
+      "kind": "aborted",
+      "sha256": "169611df37a5c15606f03f5c92033266536fb073af6159d14c293bee52859800",
+      "units": 0,
+      "pending_turns": 1,
+      "original_unchanged": true
+    }
+  ],
+  "scope": {
+    "hosted_generation": false,
+    "hugging_face_publication": false,
+    "live_service_changes_by_dependency_worker": false,
+    "live_enrollment_changes": false,
+    "activation": "Integration owner activates bridge, Funes refresh and Actomasto together; preserve existing controls, corpus, enrollment, pending work and history."
+  }
+}
