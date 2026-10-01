@@ -1,0 +1,58 @@
+{
+  "date": "2026-10-01",
+  "assistance": "OpenAI Codex",
+  "branch": "update-20261001-stable1849",
+  "preserved_actomasto_revision": "4fcd7a4645787e6194bc4c08845a3ee6d2f4d503",
+  "upstream_main": "2cb9b410d1073eb607acad60fa8d791532dfab66",
+  "upstream_integration": "Merge origin/main including evidence-grounded project suggestions into deployed custom collector lineage; README conflict resolved preserving both guides and historical verification.",
+  "python": {
+    "version": "3.13.12",
+    "dependency_refresh": "uv lock --upgrade --refresh resolved 20 packages; no compatible version changes or removed packages compared with update-all-20261001",
+    "environment": "uv sync --locked created a fresh .venv and installed 19 packages, including editable actomasto",
+    "tests": {"passed": 415, "failed": 0, "skipped": 0, "seconds": 9.73},
+    "test_command": "FUNES_TEST_BIN=/home/tmoney/code/forks/funes/.worktrees/update-20261001-stable1849/target/eee23d57b6a5895b23898792728c880b3fdd25f8/funes uv run --locked pytest -q",
+    "build": "uv build: dist/actomasto-0.1.0.tar.gz and dist/actomasto-0.1.0-py3-none-any.whl succeeded",
+    "cli_smoke": "uv run --locked actomasto --help exposes suggest, briefing, and collector commands",
+    "executable": "/home/tmoney/code/vibes/actomasto/.worktrees/update-20261001-stable1849/.venv/bin/actomasto"
+  },
+  "funes": {
+    "revision": "eee23d57b6a5895b23898792728c880b3fdd25f8",
+    "executable": "/home/tmoney/code/forks/funes/.worktrees/update-20261001-stable1849/target/eee23d57b6a5895b23898792728c880b3fdd25f8/funes",
+    "capabilities": {"protocol": 1, "build_revision": "eee23d57b6a5895b23898792728c880b3fdd25f8", "identity": "actomasto-v1", "harnesses": {"claude": "claude-schema2", "codex": "codex-0.144.1-schema1", "omp": "omp-session3-schema1"}, "local_only": true, "metadata_only": true, "revision_bound": true, "snapshot_enumeration": true, "coverage_freshness": true}
+  },
+  "isolated_daemon": {
+    "ready": true, "process_running": true, "enabled": false, "active_login": false,
+    "clean_sigterm_exit": true, "control_socket_removed": true,
+    "scope": "Temporary HOME/XDG paths, empty enrollment, no credentials, exact maintained Funes pin, no-session loginctl shim",
+    "limits": "Does not verify actual logind sessions or enabled hosted generation"
+  },
+  "suggestion_dry_run": {
+    "command": "Fresh .venv/bin/actomasto suggest --dry-run --json",
+    "hosted_processing": false,
+    "project": "git:github.com/synthetic/project",
+    "commit_evidence": "Improve synthetic cache behavior\nChanged source paths: app.txt",
+    "planning_evidence": "Current repository prose; authorship, acceptance and currency unverified.\nNext: add a regression test for cache expiry.",
+    "briefing_archive_created": false,
+    "initial_probe_failure": "Temporary smoke fixture had only completed commit evidence and incorrectly expected a filesystem-derived project name despite canonical origin. Added explicit synthetic unfinished planning context and checked canonical project identity; no application code or assertions were weakened."
+  },
+  "omp": {
+    "version": "18.4.9",
+    "authoring_binary": "/home/tmoney/code/forks/oh-my-pi/.worktrees/stable-18.4.9/packages/coding-agent/binaries/omp-linux-x64",
+    "fixture_directory": "/tmp/stack-1849-X3w3XZ",
+    "fixture_authoring": "Integration owner supplied native completed and aborted synthetic lifecycle transcripts; this worker inspected durable messages and exercised byte-identical copied originals through real FunesSource.collect."
+  },
+  "native_consumer": [
+    {"kind": "complete", "sha256": "3c4bebc505b82b4d05d214044243061ac4115d278d891bfaa6bb19c58a3aeb35", "units": 1, "pending_turns": 0, "exact_text_provenance_identity": true, "restart_deduplication": true, "terminal_interval_exclusion": true, "original_unchanged": true},
+    {"kind": "aborted", "sha256": "49ee141a62ffd0542f0a5fc8e3ba9dfbc39a630cdc45b507b820e46ddc866b24", "units": 0, "pending_turns": 1, "original_unchanged": true}
+  ],
+  "scope": {
+    "root_checkout_changes": false,
+    "service_or_live_configuration_mutation": false,
+    "hosted_model_requests": false,
+    "mastodon_posts": false,
+    "email_sends": false,
+    "uploads_or_remote_binding": false,
+    "deployment": false,
+    "release_publication": false
+  }
+}

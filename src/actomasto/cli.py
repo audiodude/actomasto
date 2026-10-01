@@ -145,7 +145,7 @@ def main(argv=None):
     args = parser().parse_args(argv)
     try:
         paths = locations()
-        if args.command == 'briefing':
+        if args.command in ('briefing', 'suggest'):
             from .briefings import execute as execute_briefing
             return execute_briefing(args)
         if args.command == 'daemon':

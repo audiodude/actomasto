@@ -83,20 +83,22 @@ def test_ambiguous_generation_retains_reservation(report_env, monkeypatch):
         briefings.run(report_env, kind='daily', report_date=date(2026, 9, 24))
 
 
-def test_budget_blocks_before_source_reads(report_env, monkeypatch):
+@pytest.mark.parametrize('kind', ['daily', 'suggest'])
+def test_budget_blocks_before_source_reads(report_env, monkeypatch, kind):
     from actomasto import briefing_sources
     report_env['monthly_usd'] = '0.01'
     monkeypatch.setattr(briefing_sources, 'collect', lambda *a, **kw: pytest.fail('budget closed'))
     with pytest.raises(briefings.BriefingError, match='monthly_budget_exhausted'):
-        briefings.run(report_env, kind='daily')
+        briefings.run(report_env, kind=kind)
 
 
-def test_disabled_hosted_processing_does_not_call_sources(report_env, monkeypatch):
+@pytest.mark.parametrize('kind', ['daily', 'suggest'])
+def test_disabled_hosted_processing_does_not_call_sources(report_env, monkeypatch, kind):
     from actomasto import briefing_sources
     report_env['hosted_processing'] = False
     monkeypatch.setattr(briefing_sources, 'collect', lambda *a, **kw: pytest.fail('not authorized'))
     with pytest.raises(briefings.BriefingError, match='not_authorized'):
-        briefings.run(report_env, kind='daily')
+        briefings.run(report_env, kind=kind)
 
 
 def test_mailgun_rejects_redirect_without_forwarding_credentials(report_env):
@@ -149,3 +151,37 @@ def test_prepared_report_is_not_sent_after_scope_changes(report_env, monkeypatch
     monkeypatch.setattr(briefings, '_send', lambda *a, **kw: pytest.fail('old scope must not be delivered'))
     with pytest.raises(briefings.BriefingError, match='configuration_changed'):
         briefings.run(report_env, kind='daily', report_date=date(2026, 9, 24), send=True)
+
+
+def test_suggestions_cannot_be_emailed(report_env):
+    with pytest.raises(briefings.BriefingError, match='suggestions_cannot_send'):
+        briefings.run(report_env, kind='suggest', send=True)
+
+
+def test_suggest_dry_run_reads_local_projects_without_hosted_consent_or_state(
+        report_env, tmp_path, monkeypatch, capsys):
+    import os
+    import subprocess
+    from actomasto.cli import main
+
+    repo = tmp_path / 'projects' / 'parser'
+    repo.mkdir(parents=True)
+    (repo / 'README.md').write_text('# Parser\n\nTODO: Handle empty input.\n')
+    env = {**os.environ, 'GIT_CONFIG_GLOBAL': os.devnull, 'GIT_CONFIG_NOSYSTEM': '1',
+           'GIT_AUTHOR_NAME': 'Owner', 'GIT_AUTHOR_EMAIL': 'author@example.invalid',
+           'GIT_COMMITTER_NAME': 'Owner', 'GIT_COMMITTER_EMAIL': 'author@example.invalid'}
+    for args in [('init', '--initial-branch=main', '--template='), ('add', 'README.md'),
+                 ('commit', '-m', 'Add parser plan')]:
+        subprocess.run(['git', '-c', 'core.hooksPath=/dev/null', '-C', str(repo), *args],
+                       env=env, check=True, capture_output=True)
+    config = {**report_env, 'hosted_processing': False}
+    briefings._private_json(briefings.config_path(), config)
+    monkeypatch.delenv('ANTHROPIC_API_KEY')
+    assert main(['suggest', '--dry-run']) == 0
+    prepared = json.loads(capsys.readouterr().out)
+    assert len(prepared['resurfacing_ids']) == 1
+    assert prepared['projects'][0]['name'] == 'parser'
+    assert any('TODO: Handle empty input.' in item['text']
+               for item in prepared['sources'].values())
+    assert not (briefings.locations()['data'] / 'briefings').exists()
+    assert not (briefings.locations()['data'] / 'state.sqlite3').exists()

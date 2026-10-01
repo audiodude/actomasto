@@ -152,6 +152,38 @@ def _hook(item, quote, unfinished):
     return False
 
 
+def _suggest_hook(item, quote, unfinished):
+    """Select a cited basis for new work; eligibility does not establish intention."""
+    if (_status(item, item["text"]) in {"rejected", "deferred", "speculative"}
+            or any(_status(item, line) in {"rejected", "deferred", "speculative"}
+                   for line in quote.splitlines())):
+        return False
+    if item["kind"] == "working_tree" and item["provenance"] in {"observed", "current_observation"}:
+        return any(line.strip() and line.strip() in quote
+                   for value in unfinished for line in value.splitlines())
+    if not (_trusted(item) or (item["kind"] in {"planning", "context"}
+                              and item["provenance"] in {"observed", "repository_context"})):
+        return False
+    marker = _PLANNING_TASK.search(quote) or (_ACTION.search(quote) if _trusted(item) else None)
+    if marker:
+        return bool(re.search(r"\w", quote[marker.end():]))
+    if _trusted(item):
+        return bool(quote.strip())
+    if (item["kind"] in {"planning", "context"}
+            and item["provenance"] in {"observed", "repository_context"}):
+        return any(line.strip() and not line.lstrip().startswith(("#", "Current repository prose;"))
+                   for line in quote.splitlines())
+    return False
+
+
+def _suggest_priority(item):
+    if item["kind"] == "working_tree":
+        return 0
+    explicit = bool(_PLANNING_TASK.search(item["text"])
+                    or (_trusted(item) and _ACTION.search(item["text"])))
+    return (1 if _trusted(item) else 2) if explicit else (3 if _trusted(item) else 4)
+
+
 def _excerpts(text):
     """Contiguous original slices; never ask the model to transcribe Markdown."""
     quotes = []
@@ -182,8 +214,13 @@ def _payload(prepared):
     payload = {key: prepared[key] for key in
                ("kind", "report_date", "timezone", "window", "recap_ids", "resurfacing_ids")}
     recap_ids = set(prepared["recap_ids"])
+    private_keys = {"hosts", "evidence"}
+    if prepared["kind"] == "suggest":
+        private_keys |= {"unfinished", "hook_rank", "personal_activity", "hook_ids"}
     payload["projects"] = [
-        {key: value for key, value in project.items() if key not in {"hosts", "evidence"}}
+        {key: value for key, value in project.items() if key not in private_keys}
+        | ({"hook_ids": [item["id"] for item in project["evidence"]
+                        if item["id"] in project["hook_ids"]]} if prepared["kind"] == "suggest" else {})
         | {"evidence": [
             {key: value for key, value in item.items() if key not in {"text", "quotes"}}
             | {"quotes": [{"index": index, "text": quote} for index, quote in enumerate(item["quotes"])],
@@ -201,7 +238,7 @@ def prepare(bundle: dict, *, kind: str, report_date: date, timezone: str,
     ``payload`` is the complete model-visible data. ``sources`` and ``blocklist``
     remain local. ``report_date`` is the delivery date, not the recap date.
     """
-    if kind not in {"daily", "weekly", "reentry"} or type(report_date) is not date:
+    if kind not in {"daily", "weekly", "reentry", "suggest"} or type(report_date) is not date:
         raise BriefingGenerationError("invalid_request")
     try:
         zone = ZoneInfo(timezone)
@@ -213,9 +250,10 @@ def prepare(bundle: dict, *, kind: str, report_date: date, timezone: str,
         policy = Policy({"blocklist": bundle.get("blocklist", {})})
     except (PolicyError, TypeError, AttributeError):
         raise BriefingGenerationError("policy_rejected") from None
-    days = 7 if kind == "weekly" else 1
-    end = datetime.combine(report_date, midnight.min, zone)
-    start = datetime.combine(report_date - timedelta(days=days), midnight.min, zone)
+    days = 7 if kind == "weekly" else 30 if kind == "suggest" else 1
+    end_date = report_date + timedelta(days=1) if kind == "suggest" else report_date
+    end = datetime.combine(end_date, midnight.min, zone)
+    start = datetime.combine(end_date - timedelta(days=days), midnight.min, zone)
     window = None if kind == "reentry" else {"start": start.isoformat(), "end": end.isoformat()}
     candidates = bundle["projects"]
     if any(not isinstance(candidate, dict) for candidate in candidates):
@@ -284,6 +322,39 @@ def prepare(bundle: dict, *, kind: str, report_date: date, timezone: str,
                 continue
             clean = {"id": evidence_id, "kind": item_kind, "provenance": provenance,
                      "time": stamp.isoformat() if stamp else None, "text": text, "quotes": _excerpts(text)}
+            if kind == "suggest":
+                # Keep exact actionable excerpts even when a long record's
+                # introductory prose consumes the ordinary per-record bound.
+                hook_quotes = [quote for quote in _excerpts(full_text)
+                               if _suggest_hook(clean, quote, unfinished)]
+                # A task heading at an ordinary excerpt boundary must keep its
+                # following action, rather than become an empty marker.
+                markers = [_PLANNING_TASK]
+                if _trusted(clean):
+                    markers.append(_ACTION)
+                for pattern in markers:
+                    for match in pattern.finditer(full_text):
+                        line_start = full_text.rfind("\n", 0, match.start()) + 1
+                        quote = full_text[line_start:line_start + 600].strip()
+                        if _suggest_hook(clean, quote, unfinished):
+                            hook_quotes.append(quote)
+                hook_quotes.sort(key=lambda quote: not _hook(clean, quote, unfinished))
+                if hook_quotes:
+                    ordered_quotes = list(dict.fromkeys([*hook_quotes, *clean["quotes"]]))
+                    clean["quotes"] = []
+                    quote_bytes = 0
+                    for quote in ordered_quotes:
+                        size = len(quote.encode("utf-8"))
+                        if quote_bytes + size <= MAX_EVIDENCE_BYTES:
+                            clean["quotes"].append(quote)
+                            quote_bytes += size
+                    clean["text"] = "\n\n".join(clean["quotes"])
+                clean["hook_quote_indices"] = [
+                    index for index, quote in enumerate(clean["quotes"])
+                    if _suggest_hook(clean, quote, unfinished)]
+                clean["recorded_step_quote_indices"] = [
+                    index for index in clean["hook_quote_indices"]
+                    if _trusted(clean) and _ACTION.search(clean["quotes"][index])]
             clean["intention_quote_indices"] = [
                 index for index, quote in enumerate(clean["quotes"])
                 if _INTENTION.search(quote) and _status(clean, quote) not in {"rejected", "deferred", "speculative"}
@@ -301,29 +372,50 @@ def prepare(bundle: dict, *, kind: str, report_date: date, timezone: str,
                     if item["time"] and (item["kind"], item["provenance"]) in _PERSONAL]
         recorded_last = max((_timestamp(item["time"]) for item in personal), default=None)
         declared_last = _timestamp(original.get("last_activity"))
+        if kind == "suggest" and declared_last and declared_last >= end:
+            declared_last = None
         last = max((value for value in (recorded_last, declared_last) if value is not None), default=None)
         age = (report_date - last.astimezone(zone).date()).days if last else None
-        hooks = [item["id"] for item in normalized if _hook(item, item["text"], unfinished)]
-        eligible = bool(age is not None and 7 < age < 30 and hooks)
+        hooks = ([item["id"] for item in normalized if item["hook_quote_indices"]]
+                 if kind == "suggest" else
+                 [item["id"] for item in normalized if _hook(item, item["text"], unfinished)])
+        eligible = bool(hooks) if kind == "suggest" else bool(age is not None and 7 < age < 30 and hooks)
         entry = {"id": project_id, "name": name, "last_activity": last.isoformat() if last else None,
                  "hosts": hosts, "unfinished": unfinished, "evidence": [], "hook_ids": hooks,
                  "resurfacing_eligible": eligible}
+        if kind == "suggest":
+            entry["hook_rank"] = min((
+                _suggest_priority(item)
+                for item in normalized if item["id"] in hooks), default=3)
+            entry["personal_activity"] = recorded_last.isoformat() if recorded_last else None
         for item in normalized:
             stamp = _timestamp(item["time"])
-            recap = bool(kind != "reentry" and stamp and start <= stamp < end
+            recap = bool(kind not in {"reentry", "suggest"} and stamp and start <= stamp < end
                          and (item["kind"], item["provenance"]) in _PERSONAL | {("conversation", "assistant_reported")})
             rows.append((-(stamp.timestamp() if stamp else 0), project_id, item, entry, recap))
     entries = {row[1]: row[3] for row in rows}
-    returning = {entry["id"] for entry in sorted(entries.values(), key=lambda entry: (
-        _timestamp(entry["last_activity"]).timestamp() if entry["last_activity"] else 0,
-        entry["id"]), reverse=True) if entry["resurfacing_eligible"]}
-    returning = set(sorted(returning, key=lambda value: (
-        _timestamp(entries[value]["last_activity"]).timestamp(), value), reverse=True)[:2])
+    if kind == "suggest":
+        suggestion_order = sorted(
+            (entry for entry in entries.values() if entry["resurfacing_eligible"]),
+            key=lambda entry: (entry["hook_rank"],
+                               -(_timestamp(entry["personal_activity"]).timestamp()
+                                 if entry["personal_activity"] else 0), entry["id"]))
+        returning = {entry["id"] for entry in suggestion_order[:3]}
+    else:
+        returning = {entry["id"] for entry in sorted(entries.values(), key=lambda entry: (
+            _timestamp(entry["last_activity"]).timestamp() if entry["last_activity"] else 0,
+            entry["id"]), reverse=True) if entry["resurfacing_eligible"]}
+        returning = set(sorted(returning, key=lambda value: (
+            _timestamp(entries[value]["last_activity"]).timestamp(), value), reverse=True)[:2])
     reserved_hooks = {}
     groups = {}
-    for row in sorted(rows, key=lambda row: (row[0], row[1], row[2]["id"])):
+    for row in sorted(rows, key=lambda row: (
+            _suggest_priority(row[2]) if kind == "suggest" else 0,
+            row[0], row[1], row[2]["id"])):
         _, project_id, item, entry, recap = row
         if kind == "daily" and not recap and project_id not in returning:
+            continue
+        if kind == "suggest" and project_id not in returning:
             continue
         priority = 1 if recap or kind == "reentry" else 2
         if (kind != "reentry" and project_id in returning and project_id not in reserved_hooks
@@ -340,8 +432,8 @@ def prepare(bundle: dict, *, kind: str, report_date: date, timezone: str,
             (0 if row[2]["kind"] == "commit" else 1 if _trusted(row[2]) else 2),
             row[0], row[2]["id"]))
         ranked.extend((priority, index, project_id, row) for index, row in enumerate(group))
-    # At most two useful hooks reserve their place before round-robin recap
-    # packing. Whole evidence omissions and clipping are both disclosed.
+    # Candidate hooks reserve their place before round-robin context packing.
+    # Whole evidence omissions and clipping are both disclosed.
     included = {}
     for _, _, _, (_, project_id, item, entry, recap) in sorted(ranked):
         fresh = project_id not in included
@@ -369,6 +461,10 @@ def prepare(bundle: dict, *, kind: str, report_date: date, timezone: str,
     result["resurfacing_ids"] = [entry["id"] for entry in sorted(
         result["projects"], key=lambda entry: (entry["last_activity"] or "", entry["id"]), reverse=True)
         if entry["resurfacing_eligible"]][:2] if kind != "reentry" else []
+    if kind == "suggest":
+        result["resurfacing_ids"] = [
+            entry["id"] for entry in suggestion_order[:3]
+            if entry["id"] in included and included[entry["id"]]["resurfacing_eligible"]]
     selected = {item["id"] for entry in result["projects"] for item in entry["evidence"]}
     result["sources"] = {key: value for key, value in result["sources"].items() if key in selected}
     recap_groups = {}
@@ -388,6 +484,10 @@ def prepare(bundle: dict, *, kind: str, report_date: date, timezone: str,
         result["coverage"].append("Evidence was trimmed to the briefing size limit; omitted context may change the picture.")
     if not selected:
         result["coverage"].append("No usable evidence was available for this selection; this does not establish inactivity.")
+    if kind == "suggest":
+        result["coverage"].append(
+            "Recommendations use only the supplied bounded 30-day collection and available repository snapshots, "
+            "excluding dated records after the requested local date; at most three projects with cited context or unfinished-work evidence are selected.")
     result["coverage"].extend([
         "Only enrolled, available sources are represented. Missing evidence does not establish inactivity.",
         "Historical and assistant statements are reports, not verified outcomes. Current applicability and supersession are unverified.",
@@ -447,7 +547,7 @@ def output_format(prepared):
         schema["required"].remove("recap")
     allowed = {"daily": {"recap", "resurfacing"},
                "weekly": {"recap", "continuity", "resurfacing"},
-               "reentry": {"reentry"}}[prepared["kind"]]
+               "reentry": {"reentry"}, "suggest": {"resurfacing"}}[prepared["kind"]]
     if not prepared["resurfacing_ids"]:
         allowed.discard("resurfacing")
     for section in tuple(schema["properties"]):
@@ -474,6 +574,9 @@ def output_format(prepared):
     else:
         del definitions["entry"]["properties"]["intention"]
         definitions["entry"]["required"].remove("intention")
+    if prepared["kind"] == "suggest" and not any(
+            source["recorded_step_quote_indices"] for source in prepared["sources"].values()):
+        definitions["step"]["properties"]["kind"]["enum"] = ["suggestion"]
     for name in ("citation", "decision", "step", "recap_citation", "intention_citation"):
         if name in definitions:
             del definitions[name]["properties"]["project_id"]
@@ -555,6 +658,28 @@ clearly new suggestion. Include the newest available dated record in reentry con
 Evidence marked recap_eligible=false is context, NEVER a recap citation. If recap_ids is
 empty, omit recap. If resurfacing_ids is empty, omit resurfacing. Never invent activity or
 inactivity from a missing source.
+"""
+
+_SUGGEST_INSTRUCTIONS = """
+For mode suggest, the recommendation rules below replace daily/weekly resurfacing selection:
+emit ONLY resurfacing, with up to THREE entries from resurfacing_ids. Recommend concrete
+next work on these existing projects, whether recently active or dormant; age is not a reason.
+First context MUST cite a hook_id and one of that record's hook_quote_indices. These eligible
+excerpts may describe unfinished work, the project's purpose, or personal work and interests.
+Prefer supported unfinished work; otherwise propose a concrete new action that fits the cited
+project context. Do not call contextual proposals unfinished work or invent urgency or benefits.
+Every recommendation MUST have one meaningful next_step. For a newly proposed action, cite
+a hook_quote_index and set kind=suggestion; never claim it is an intention or accepted task.
+Use kind=recorded ONLY for a quote_index in that source's recorded_step_quote_indices,
+with text="". When those indices are empty, only a new suggestion is supported.
+Do not revive explicitly rejected, deferred or speculative work, including qualifications
+elsewhere in the supplied project evidence. Do not infer intention from commits or snapshots.
+Do not repeat work later reported complete. If completion is uncertain, suggest a concrete
+verification action rather than presenting the old request as still unfinished.
+Return resurfacing=[] if the supplied context makes every candidate unsuitable or superseded;
+an eligible excerpt is a candidate, not proof that work remains unfinished or worth recommending.
+The 30-day evidence window includes the requested local date, not dates after it. No recap,
+continuity or reentry sections are permitted. Existing source, quotation and role safeguards apply.
 """
 
 
@@ -645,7 +770,12 @@ def validate(report: dict, prepared: dict) -> dict:
             hook_source = sources[first["evidence_id"]]
             if (project_id not in prepared["resurfacing_ids"]
                     or first["evidence_id"] not in selected["hook_ids"]
-                    or not _hook(hook_source, hook_source["text"], selected["unfinished"])):
+                    or (prepared["kind"] != "suggest"
+                        and not _hook(hook_source, hook_source["text"], selected["unfinished"]))):
+                raise BriefingGenerationError("unsupported_resurfacing")
+            if (prepared["kind"] == "suggest"
+                    and (first["quote_index"] not in hook_source["hook_quote_indices"]
+                         or not _suggest_hook(hook_source, _quotation(first, hook_source), selected["unfinished"]))):
                 raise BriefingGenerationError("unsupported_resurfacing")
         else:
             dated = [item for item in selected["evidence"] if item["time"]]
@@ -660,6 +790,8 @@ def validate(report: dict, prepared: dict) -> dict:
                     or _status(item, quote) in {"rejected", "deferred", "speculative"}):
                 raise BriefingGenerationError("unsupported_intention")
         step = _single(value["next_step"])
+        if prepared["kind"] == "suggest" and step is None:
+            raise BriefingGenerationError("missing_next_step")
         if step is not None:
             item = reference(step, _STEP["required"])
             quote = _quotation(step, item)
@@ -673,10 +805,18 @@ def validate(report: dict, prepared: dict) -> dict:
                    for decision in value["decisions"]):
                 raise BriefingGenerationError("unsupported_next_step")
             if step["kind"] == "recorded":
+                if (prepared["kind"] == "suggest"
+                        and step["quote_index"] not in item["recorded_step_quote_indices"]):
+                    raise BriefingGenerationError("unsupported_next_step")
                 if (not _trusted(item) or not _ACTION.search(quote)
                         or _status(item, quote) == "speculative" or step["text"] != ""):
                     raise BriefingGenerationError("unsupported_next_step")
             elif step["kind"] == "suggestion":
+                if (prepared["kind"] == "suggest"
+                        and (item["id"] not in selected["hook_ids"]
+                             or step["quote_index"] not in item["hook_quote_indices"]
+                             or not _suggest_hook(item, quote, selected["unfinished"]))):
+                    raise BriefingGenerationError("unsupported_next_step")
                 if (not isinstance(step["text"], str) or not step["text"].strip() or len(step["text"]) > 400
                         or "\n" in step["text"] or "\r" in step["text"] or re.search(r"\[\d+\]", step["text"])):
                     raise BriefingGenerationError("invalid_suggestion")
@@ -687,7 +827,8 @@ def validate(report: dict, prepared: dict) -> dict:
             else:
                 raise BriefingGenerationError("unsupported_next_step")
 
-    for key, maximum in (("recap", 12), ("continuity", 6), ("resurfacing", 2)):
+    for key, maximum in (("recap", 12), ("continuity", 6),
+                         ("resurfacing", 3 if prepared["kind"] == "suggest" else 2)):
         if not isinstance(report[key], list) or len(report[key]) > maximum:
             raise BriefingGenerationError("invalid_report_shape")
     recap_counts = {}
@@ -707,6 +848,9 @@ def validate(report: dict, prepared: dict) -> dict:
         project_ids.append(value["project_id"])
     if len(set(project_ids)) != len(project_ids):
         raise BriefingGenerationError("duplicate_resurfacing")
+    if prepared["kind"] == "suggest":
+        if report["recap"] or report["continuity"] or report["reentry"]:
+            raise BriefingGenerationError("invalid_report_kind")
     reentry = _single(report["reentry"])
     if prepared["kind"] == "reentry":
         if report["recap"] or report["continuity"] or report["resurfacing"]:
@@ -753,10 +897,11 @@ def render(report: dict, prepared: dict) -> dict:
                 "inventory_context": "inventory context", "inventory": "inventory context"}[item["provenance"]]
 
     kind = prepared["kind"]
-    label = {"daily": "Your daily briefing", "weekly": "Your weekly briefing", "reentry": "Project re-entry"}[kind]
+    label = {"daily": "Your daily briefing", "weekly": "Your weekly briefing",
+             "reentry": "Project re-entry", "suggest": "Project recommendations"}[kind]
     subject = f'{label} — {prepared["report_date"]}'
     lines = [subject, ""]
-    if kind != "reentry":
+    if kind in {"daily", "weekly"}:
         lines.append("Yesterday, in the available record:" if kind == "daily" else "The last seven complete days, in the available record:")
         recap_projects = {}
         for citation in sorted(report["recap"], key=lambda ref: _order(sources[ref["evidence_id"]])):
@@ -779,11 +924,13 @@ def render(report: dict, prepared: dict) -> dict:
     for value in entries:
         project_id = value["project_id"]
         name = project_label(project_id)
-        lines.extend(["", f'{"Worth a look" if kind != "reentry" else "Back to"}: {name}'])
+        heading = "Recommended project" if kind == "suggest" else "Worth a look" if kind != "reentry" else "Back to"
+        lines.extend(["", f'{heading}: {name}'])
         context = value["context"]
         if kind != "reentry":
             hook = context[0]
-            lines.append(f'Why revisit: {excerpt(hook, summarize=True)} ({when(sources[hook["evidence_id"]])}; {attribution(sources[hook["evidence_id"]])}).')
+            reason = "Why this project" if kind == "suggest" else "Why revisit"
+            lines.append(f'{reason}: {excerpt(hook, summarize=True)} ({when(sources[hook["evidence_id"]])}; {attribution(sources[hook["evidence_id"]])}).')
             context = context[1:]
         for citation in sorted(context, key=lambda ref: _order(sources[ref["evidence_id"]])):
             item = sources[citation["evidence_id"]]
@@ -807,6 +954,12 @@ def render(report: dict, prepared: dict) -> dict:
             lines.append(f'Based on: {excerpt(step, summarize=True)}')
     if kind == "reentry" and not entries:
         lines.append("No usable project context is available. Missing sources do not establish inactivity.")
+    if kind == "suggest" and not entries:
+        reason = ("the collected sources contain no eligible project context or unfinished-work evidence"
+                  if not prepared["resurfacing_ids"] else
+                  "the available context does not support picking up these candidate projects")
+        lines.append(f"No evidence-grounded recommendations are available: {reason}. "
+                     "This does not establish inactivity or completion.")
     if cited:
         lines.extend(["", "Sources:"])
         for index, evidence_id in enumerate(cited, 1):
@@ -862,13 +1015,14 @@ def generate(bundle: dict, *, kind: str, report_date: date, timezone: str,
              api_key: str, project: str | None = None, client=None) -> dict:
     """Make exactly one messages request; no tools, retries, redirects or side effects."""
     prepared = prepare(bundle, kind=kind, report_date=report_date, timezone=timezone, project=project)
-    if not prepared["sources"]:
+    if not prepared["sources"] or (kind == "suggest" and not prepared["resurfacing_ids"]):
         empty = {"recap": [], "continuity": [], "resurfacing": [], "reentry": []}
         return {**render(empty, prepared), "usage": {"input_tokens": 0, "output_tokens": 0}, "model": MODEL}
     if not isinstance(api_key, str) or not api_key.strip():
         raise BriefingGenerationError("missing_api_key")
     response_format = output_format(prepared)
-    body = {"model": MODEL, "system": _SYSTEM, "max_tokens": MAX_OUTPUT_TOKENS,
+    body = {"model": MODEL, "system": _SYSTEM + (_SUGGEST_INSTRUCTIONS if kind == "suggest" else ""),
+            "max_tokens": MAX_OUTPUT_TOKENS,
             "output_config": {"format": response_format},
             "messages": [{"role": "user", "content": _json(prepared["payload"])}]}
     # Byte count is a conservative token upper bound. Including the prompt and
