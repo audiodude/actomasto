@@ -191,6 +191,10 @@ def run(config, *, kind, report_date=None, project=None, dry_run=False, send=Fal
     from .briefing_generation import generate, prepare
     now = datetime.now(ZoneInfo(config['timezone']))
     report_date = report_date or now.date()
+    if kind not in ('daily', 'weekly', 'reentry', 'suggest'):
+        raise BriefingError('invalid_report_kind')
+    if kind == 'suggest' and send:
+        raise BriefingError('suggestions_cannot_send')
     if (kind == 'reentry') != bool(project):
         raise BriefingError('reentry_requires_project_only')
     if dry_run and send:
@@ -289,6 +293,10 @@ def service(config, action):
 
 
 def add_parser(commands):
+    suggest = commands.add_parser('suggest', help='Suggest up to three projects to work on, with evidence and next actions')
+    suggest.set_defaults(briefing_action='run', kind='suggest', date=None, project=None, send=False)
+    suggest.add_argument('--dry-run', action='store_true', help='Local filtered evidence only; no model or email')
+    suggest.add_argument('--json', action='store_true')
     command = commands.add_parser('briefing', help='Independent personal reports; never enables draft collection')
     subs = command.add_subparsers(dest='briefing_action', required=True)
     run_parser = subs.add_parser('run')
@@ -320,7 +328,8 @@ def execute(args):
             raise BriefingError(str(error)) from None
         if not args.json and not args.dry_run:
             print(terminal_safe(result['text']))
-            print('\nDelivery: ' + result['delivery']['state'])
+            if args.kind != 'suggest':
+                print('\nDelivery: ' + result['delivery']['state'])
         else:
             print(json.dumps(terminal_safe(result), ensure_ascii=False, indent=2))
         return 0 if not args.send or result.get('delivery', {}).get('state') == 'accepted' else 1

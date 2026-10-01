@@ -2,6 +2,7 @@
 import copy
 import json
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
@@ -727,3 +728,250 @@ def test_reentry_citation_identity_is_derived_for_context_decisions_intention_an
                           timezone=ZONE, project=identity, api_key="synthetic-key", client=client)
     for section in ("context", "decisions", "intention", "next_step"):
         assert result["report"]["reentry"][0][section][0]["project_id"] == identity
+
+
+def suggestion_entry(identifier, item, *, recorded=False):
+    citation = ref(item, identifier)
+    return entry(identifier, citation, next_step=[{
+        **citation, "kind": "recorded" if recorded else "suggestion",
+        "text": "" if recorded else "Exercise the empty-input boundary before continuing the parser work."}])
+
+
+def test_suggest_includes_current_local_day_and_dormant_hooks_without_age_only_candidates():
+    current = evidence("current-hook", text="TODO: Check empty input.",
+                       at="2026-09-25T06:59:59+00:00", kind="planning", provenance="authored_planning")
+    future = evidence("future-hook", text="TODO: Replace the parser.",
+                      at="2026-09-25T07:00:00+00:00", kind="planning", provenance="authored_planning")
+    dormant = parked("dormant", 30)
+    age_only = parked("ageonly", 12, hook=False)
+    data = bundle(project("current", [current, future]), dormant, age_only)
+    prepared = packet(data, "suggest")
+    assert prepared["resurfacing_ids"] == ["current", "dormant"]
+    assert "current-hook" in prepared["sources"]
+    assert "future-hook" not in prepared["sources"]
+    assert prepared["recap_ids"] == []
+    assert packet(data)["resurfacing_ids"] == []
+    value = report(resurfacing=[
+        suggestion_entry("current", current, recorded=True),
+        suggestion_entry("dormant", dormant["evidence"][1]),
+    ])
+    result = render(value, prepared)
+    assert {citation["id"] for citation in result["citations"]} == {
+        "current-hook", "dormant-hook"}
+    assert result["report"]["recap"] == result["report"]["continuity"] == result["report"]["reentry"] == []
+    assert any("30-day" in line for line in result["coverage"])
+
+
+@pytest.mark.parametrize("delivery,expected_hours", [(date(2026, 3, 8), 23), (date(2026, 11, 1), 25)])
+def test_suggest_uses_local_calendar_boundary_including_dst(delivery, expected_hours):
+    zone = ZoneInfo(ZONE)
+    start = datetime.combine(delivery, datetime.min.time(), zone)
+    end = datetime.combine(delivery + timedelta(days=1), datetime.min.time(), zone)
+    first = evidence("first", text="TODO: Check the input boundary.", at=start.isoformat(),
+                     kind="planning", provenance="authored_planning")
+    after = evidence("after", text="TODO: Check future input.", at=end.isoformat(),
+                     kind="planning", provenance="authored_planning")
+    prepared = prepare(bundle(project(items=[first, after])), kind="suggest",
+                       report_date=delivery, timezone=ZONE)
+    assert set(prepared["sources"]) == {"first"}
+    assert datetime.fromisoformat(prepared["window"]["end"]) == end
+    assert (end.timestamp() - start.timestamp()) / 3600 == expected_hours
+
+
+def test_suggest_ranks_concrete_hooks_and_personal_activity_deterministically_and_caps_at_three():
+    recent = parked("recent", 1)
+    dormant = parked("dormant", 20)
+    older = parked("older", 21)
+    dirty = project("dirty", [evidence("dirty-hook", text="M parser.py", at=None,
+                                     kind="working_tree", provenance="observed")],
+                    unfinished=["M parser.py"])
+    data = bundle(older, dormant, recent, dirty, parked("ageonly", 10, hook=False))
+    prepared = packet(data, "suggest")
+    reordered = packet(bundle(*reversed(data["projects"])), "suggest")
+    assert prepared["resurfacing_ids"] == reordered["resurfacing_ids"] == ["dirty", "recent", "dormant"]
+    values = [suggestion_entry(identifier, prepared["sources"][f"{identifier}-hook"])
+              for identifier in prepared["resurfacing_ids"]]
+    result = render(report(resurfacing=values), prepared)
+    assert {citation["project_id"] for citation in result["citations"]} == {"dirty", "recent", "dormant"}
+    with pytest.raises(BriefingGenerationError, match="invalid_report_shape"):
+        validate(report(resurfacing=[*values, copy.deepcopy(values[0])]), prepared)
+
+
+def test_suggest_reserves_actionable_excerpts_and_all_three_projects_when_context_is_trimmed():
+    projects = []
+    for number in range(3):
+        identifier = f"project-{number}"
+        text = "Background observations about parser behavior.\n" * 140 + "\nTODO: Check empty input."
+        hook = evidence(f"{identifier}-hook", text=text, at=None, kind="planning", provenance="observed")
+        items = [hook, *[evidence(f"{identifier}-noise-{index}", text="Recorded parser context. " * 200)
+                         for index in range(12)]]
+        projects.append(project(identifier, items))
+    prepared = packet(bundle(*projects), "suggest")
+    assert set(prepared["resurfacing_ids"]) == {candidate["id"] for candidate in projects}
+    values = []
+    for identifier in prepared["resurfacing_ids"]:
+        source = prepared["sources"][f"{identifier}-hook"]
+        index = source["hook_quote_indices"][0]
+        citation = {**ref(source, identifier, index), "summary": "An explicit empty-input task remains in the plan."}
+        values.append(entry(identifier, citation, next_step=[{
+            **citation, "kind": "suggestion", "text": "Exercise empty input with the existing parser."}]))
+        assert "TODO: Check empty input." in source["quotes"][index]
+    result = render(report(resurfacing=values), prepared)
+    assert {citation["project_id"] for citation in result["citations"]} == set(prepared["resurfacing_ids"])
+    assert len(json.dumps(prepared["payload"], ensure_ascii=False, separators=(",", ":")).encode()) <= MAX_INPUT_BYTES
+    assert any("trimmed" in line for line in result["coverage"])
+
+
+@pytest.mark.parametrize("status", ["Rejected", "Deferred", "Speculative"])
+def test_suggest_never_selects_explicitly_qualified_work(status):
+    blocked = evidence("blocked-hook", text=f"{status}: TODO: Replace the parser.",
+                       kind="conversation", provenance="user_reported")
+    prepared = packet(bundle(project("blocked", [blocked]), parked("eligible", 12)), "suggest")
+    assert prepared["resurfacing_ids"] == ["eligible"]
+    with pytest.raises(BriefingGenerationError, match="unknown_project"):
+        validate(report(resurfacing=[suggestion_entry("blocked", blocked)]), prepared)
+
+
+@pytest.mark.parametrize("mutation,error", [
+    ("unknown_project", "unknown_project"), ("duplicate", "duplicate_resurfacing"),
+    ("nonhook_context", "unsupported_resurfacing"), ("nonhook_step", "unsupported_next_step"),
+    ("no_step", "missing_next_step"),
+    ("continuity", "invalid_report_kind"),
+])
+def test_suggest_rejects_unknown_candidates_and_unsupported_recommendations(mutation, error):
+    candidate = parked("parser", 12)
+    prepared = packet(bundle(candidate), "suggest")
+    value = report(resurfacing=[suggestion_entry("parser", candidate["evidence"][1])])
+    if mutation == "unknown_project":
+        value["resurfacing"][0]["project_id"] = "invented"
+    elif mutation == "duplicate":
+        value["resurfacing"].append(copy.deepcopy(value["resurfacing"][0]))
+    elif mutation == "nonhook_context":
+        value["resurfacing"][0]["context"] = [ref(candidate["evidence"][0])]
+    elif mutation == "nonhook_step":
+        value["resurfacing"][0]["next_step"][0].update(ref(candidate["evidence"][0]))
+    elif mutation == "no_step":
+        value["resurfacing"][0]["next_step"] = []
+    else:
+        value["continuity"] = [{**ref(candidate["evidence"][1]), "status": "unresolved"}]
+        # Use trusted decision evidence to isolate the mode restriction.
+        candidate["evidence"][1]["provenance"] = "authored_planning"
+        prepared = packet(bundle(candidate), "suggest")
+    with pytest.raises(BriefingGenerationError, match=error):
+        validate(value, prepared)
+
+
+@pytest.mark.parametrize("text,kind,provenance", [
+    ("# Parser\n\nA streaming parser for structured log events.", "planning", "observed"),
+    ("The UI caps me at 400? remove the cap", "conversation", "user_reported"),
+])
+def test_suggest_can_propose_new_work_without_inventing_recorded_intent(text, kind, provenance):
+    item = evidence("basis", text=text, at=None, kind=kind, provenance=provenance)
+    prepared = packet(bundle(project(items=[item])), "suggest")
+    assert prepared["resurfacing_ids"] == ["parser"]
+    value = report(resurfacing=[suggestion_entry("parser", item)])
+    result = render(value, prepared)
+    assert result["citations"][0]["id"] == "basis"
+    assert result["report"]["resurfacing"][0]["next_step"][0]["kind"] == "suggestion"
+    value["resurfacing"][0]["next_step"][0].update(kind="recorded", text="")
+    with pytest.raises(BriefingGenerationError, match="unsupported_next_step"):
+        validate(value, prepared)
+
+
+@pytest.mark.parametrize("items", [[], [evidence()], [
+    evidence("assistant", text="TODO: Replace the parser.", kind="conversation", provenance="assistant_reported"),
+], [
+    evidence("bare-marker", text="TODO:", kind="planning", provenance="observed"),
+]])
+def test_suggest_without_eligible_hooks_returns_honest_empty_report_without_provider(items):
+    def never_called(_):
+        pytest.fail("no eligible recommendation must not call a provider")
+    with httpx.Client(transport=httpx.MockTransport(never_called)) as client:
+        result = generate(bundle(project(items=items)), kind="suggest", report_date=DAY,
+                          timezone=ZONE, api_key="", client=client)
+    assert result["report"] == report()
+    assert result["citations"] == []
+    assert result["usage"] == {"input_tokens": 0, "output_tokens": 0}
+
+
+def test_suggest_generation_uses_one_call_and_distinguishes_new_work_from_recorded_intention():
+    recent = evidence("recent-hook", text="I want to check empty input.", at="2026-09-24T18:00:00-07:00",
+                      kind="conversation", provenance="user_reported")
+    dormant = parked("dormant", 24)
+    hook = dormant["evidence"][1]
+    response = {"resurfacing": [
+        {"project_id": "recent", "context": [provider_ref(recent)], "decisions": [],
+         "intention": [provider_ref(recent)], "next_step": [{
+             **provider_ref(recent), "kind": "recorded", "text": ""}]},
+        {"project_id": "dormant", "context": [provider_ref(hook)], "decisions": [],
+         "intention": [], "next_step": [{
+             **provider_ref(hook), "kind": "suggestion", "text": "Exercise empty input with the existing parser."}]},
+    ]}
+    calls = []
+    def handler(request):
+        calls.append(request)
+        return provider_reply(response)
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        result = generate(bundle(project("recent", [recent]), dormant), kind="suggest",
+                          report_date=DAY, timezone=ZONE, api_key="synthetic-key", client=client)
+    assert len(calls) == 1
+    assert result["usage"] == {"input_tokens": 120, "output_tokens": 30}
+    assert result["report"]["recap"] == result["report"]["continuity"] == result["report"]["reentry"] == []
+    assert {citation["project_id"] for citation in result["citations"]} == {"recent", "dormant"}
+    assert "Recorded next step (not verified as still current)" in result["text"]
+    assert "New suggestion — not a recorded intention: Exercise empty input" in result["text"]
+
+
+@pytest.mark.parametrize("section", ["recap", "continuity", "reentry"])
+def test_suggest_provider_cannot_add_an_inapplicable_mode_section(section):
+    hook = evidence("hook", text="TODO: Check empty input.", kind="planning", provenance="observed")
+    response = {"resurfacing": [], section: []}
+    with httpx.Client(transport=httpx.MockTransport(lambda _: provider_reply(response))) as client:
+        with pytest.raises(BriefingGenerationError, match="invalid_report_shape"):
+            generate(bundle(project(items=[hook])), kind="suggest", report_date=DAY,
+                     timezone=ZONE, api_key="synthetic-key", client=client)
+
+
+@pytest.mark.parametrize("status", ["Rejected", "Deferred", "Speculative"])
+@pytest.mark.parametrize("step_kind", ["recorded", "suggestion"])
+def test_suggest_rejects_qualified_next_steps_even_when_another_hook_makes_project_eligible(status, step_kind):
+    candidate = parked("parser", 12)
+    blocked = evidence("blocked", text=f"{status}: TODO: Replace the parser.",
+                       kind="conversation", provenance="user_reported")
+    candidate["evidence"].append(blocked)
+    prepared = packet(bundle(candidate), "suggest")
+    assert prepared["resurfacing_ids"] == ["parser"]
+    value = report(resurfacing=[suggestion_entry("parser", candidate["evidence"][1])])
+    value["resurfacing"][0]["next_step"] = [{
+        **ref(blocked), "kind": step_kind, "text": "" if step_kind == "recorded" else "Replace the parser."}]
+    with pytest.raises(BriefingGenerationError, match="unsupported_next_step"):
+        validate(value, prepared)
+
+
+def test_suggest_keeps_task_heading_and_action_together_at_excerpt_boundary():
+    original = "Background " * 53 + "\n## Next steps\nAdd empty-input validation.\n" + "More context. " * 80
+    hook = evidence("hook", text=original, at=None, kind="planning", provenance="observed")
+    prepared = packet(bundle(project(items=[hook])), "suggest")
+    assert prepared["resurfacing_ids"] == ["parser"]
+    source = prepared["sources"]["hook"]
+    index = next(index for index in source["hook_quote_indices"]
+                 if "## Next steps\nAdd empty-input validation." in source["quotes"][index])
+    assert source["quotes"][index] in original
+    citation = {**ref(source, quote_index=index), "summary": "The plan identifies empty-input validation as remaining work."}
+    result = render(report(resurfacing=[entry("parser", citation, next_step=[{
+        **citation, "kind": "suggestion", "text": "Exercise empty input before implementing its validation."}])]), prepared)
+    assert result["citations"][0]["quotes"][index] in original
+
+
+def test_suggest_can_decline_candidates_when_later_context_supersedes_their_hooks():
+    hook = evidence("old-plan", text="I want to check empty input.",
+                    kind="conversation", provenance="user_reported")
+    completion = evidence("completion", text="The empty-input work is complete; do not reopen it.",
+                          at="2026-09-24T12:00:00-07:00",
+                          kind="conversation", provenance="user_reported")
+    with httpx.Client(transport=httpx.MockTransport(
+            lambda _: provider_reply({"resurfacing": []}))) as client:
+        result = generate(bundle(project(items=[hook, completion])), kind="suggest",
+                          report_date=DAY, timezone=ZONE, api_key="synthetic-key", client=client)
+    assert result["report"]["resurfacing"] == []
+    assert result["citations"] == []
