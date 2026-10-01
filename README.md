@@ -127,7 +127,7 @@ run. Installing these timers does not automatically modify other applications.
 
 ## Installation
 
-Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The pinned dependency revision is `116500583749fc70c31084d514f8007c61d88d6d`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
+Requires Python 3.12+, uv, Git, systemd/logind, and the maintained Funes fork implementing [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The pinned dependency revision is `c517d868d4d36856f992682045d3610ad0f55762`; do not substitute an upstream binary without these capabilities. `notify-send` enables desktop notifications.
 
 Build Funes independently (previous builds used Rust 1.98.0, protoc, and lld on Linux), then use the absolute path to its `target/debug/funes`. Check out the pinned revision above in a separate Funes source worktree before building; a source commit is not a published binary.
 
@@ -447,3 +447,32 @@ identity, deduplication and exclusion behavior; the aborted turn remained
 pending. Funes passed both backend Clippy checks and reported 350 Rust test
 passes, including five live-Hub cases that returned early with their gate unset.
 No remote publication coverage is claimed. Assisted by OpenAI Codex.
+
+### October 1 dependency refresh
+
+This refresh starts from deployed `update-all-20260930`, preserving the collector
+repair, personal briefings, Git cutoff, history, and controls. Current
+`origin/main` is already an ancestor of that branch. The compatible Python
+dependency refresh (`uv lock --upgrade --refresh`) updates only
+`charset-normalizer` from 3.5.1 to 3.5.2; `uv sync --locked` creates an isolated
+Python 3.13.12 environment. AI-assisted with OpenAI Codex.
+
+Build the maintained Funes fork at
+`c517d868d4d36856f992682045d3610ad0f55762`, rather than using `funes update`.
+Source protocol 1 and the `omp-session3-schema1` consumer contract remain the
+compatibility boundary; Actomasto has no OMP package-version pin to update.
+
+The [October 1 verification](verification/dependencies-20261001.json) records
+379 passing tests with the exact rebuilt Funes executable, successful wheel and
+source-distribution builds, CLI help, and a real isolated daemon reaching
+readiness, answering status while disabled, and shutting down cleanly. The
+daemon used temporary HOME/XDG paths, empty enrollment, and an isolated
+no-session `loginctl` shim; this is not a real logind or enabled-generation check.
+
+Native OMP 18.4.6 completed and aborted lifecycle transcripts passed the real
+consumer probe: exact complete-turn text, provenance and identity, restart
+deduplication, terminal interval exclusion, and unchanged originals were checked.
+The aborted turn produced no unit and remained pending. No live enrollment,
+service changes, hosted generation, email sends or Hugging Face publication
+were performed by this dependency worker; live activation belongs to the
+integration owner and must preserve existing state and controls.

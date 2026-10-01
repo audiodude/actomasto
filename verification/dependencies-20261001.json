@@ -1,0 +1,66 @@
+{
+  "date": "2026-10-01",
+  "assistance": "OpenAI Codex",
+  "branch": "update-all-20261001",
+  "preserved_actomasto_revision": "7fa64a3d242f085b49501362e09c2a3b72397705",
+  "upstream_main": "bb5ad8cf030d5ea65ea8104e0d0182117ad59b5e",
+  "upstream_integration": "origin/main is already an ancestor of the deployed update-all-20260930 branch; no additional merge needed",
+  "python": {
+    "version": "3.13.12",
+    "dependency_refresh": "uv lock --upgrade --refresh: charset-normalizer 3.5.1 -> 3.5.2; other compatible versions unchanged",
+    "environment": "uv sync --locked: passed, isolated .venv created",
+    "tests": {"passed": 379, "failed": 0, "skipped": 0},
+    "test_command": "FUNES_TEST_BIN=/home/tmoney/code/forks/funes/.worktrees/update-all-20261001/target/c517d868d4d36856f992682045d3610ad0f55762/funes uv run --locked pytest -q",
+    "build": "uv build: dist/actomasto-0.1.0.tar.gz and dist/actomasto-0.1.0-py3-none-any.whl succeeded",
+    "cli_smoke": "uv run --locked actomasto --help: passed",
+    "service_executable": "/home/tmoney/code/vibes/actomasto/.worktrees/update-all-20261001/.venv/bin/actomasto"
+  },
+  "funes": {
+    "revision": "c517d868d4d36856f992682045d3610ad0f55762",
+    "executable": "/home/tmoney/code/forks/funes/.worktrees/update-all-20261001/target/c517d868d4d36856f992682045d3610ad0f55762/funes",
+    "binary_sha256": "a31482c8e8fb010d22ed0f76b51fe419456bfd30c63a91a462f5a18cfa94e776",
+    "capabilities": "Exact build revision, source protocol 1, actomasto-v1 and omp-session3-schema1 verified through FunesSource.capabilities"
+  },
+  "isolated_daemon": {
+    "ready": true,
+    "process_running": true,
+    "enabled": false,
+    "clean_sigterm_exit": true,
+    "control_socket_removed": true,
+    "live_state_accessed": false,
+    "loginctl": "isolated no-session shim",
+    "scope": "Temporary HOME/XDG paths, empty enrollment and no credentials; configured with the exact Funes pin"
+  },
+  "omp": {
+    "version": "18.4.6",
+    "native_fixture_directory": "/tmp/omp-stack-18.4.6-1790822365",
+    "fixture_authoring": "Integration owner supplied native completed and aborted lifecycle transcripts; copied synthetic originals exercised through FunesSource.collect"
+  },
+  "native_consumer": [
+    {
+      "kind": "complete",
+      "sha256": "c9ddc7b0911578866b7fe482a15c8885b323fcbf0f5f2bedf3f792c86be5632e",
+      "units": 1,
+      "pending_turns": 0,
+      "exact_text_provenance_identity": true,
+      "restart_deduplication": true,
+      "terminal_interval_exclusion": true,
+      "original_unchanged": true
+    },
+    {
+      "kind": "aborted",
+      "sha256": "792c649658cba5724c1c691e7e86187dfb323101eebd60ed844bb0b56697642c",
+      "units": 0,
+      "pending_turns": 1,
+      "original_unchanged": true
+    }
+  ],
+  "scope": {
+    "hosted_generation": false,
+    "email_sends": false,
+    "hugging_face_publication": false,
+    "live_service_changes_by_dependency_worker": false,
+    "live_enrollment_changes": false,
+    "activation": "Integration owner owns live activation; preserve existing corpus, enrollment, pending work, history and controls"
+  }
+}
