@@ -9,6 +9,7 @@ import os
 import shlex
 import sqlite3
 import subprocess
+import sys
 
 import pytest
 
@@ -142,6 +143,41 @@ def test_duplicate_origins_merge_shared_commits_but_retain_clone_divergence(tmp_
     assert len(dirty) == 1 and str(clone) in dirty[0]["source"]
 
 
+def test_metadata_budget_keeps_recent_work_before_busy_project_old_history(tmp_path, monkeypatch):
+    busy = Repository(tmp_path / "busy")
+    detail = "Routine implementation detail. " * 40
+    older = busy.commit({"old.py": "old = 1"}, summary="Older change\n" + detail, stamp=STAMP - 2 * 86400)
+    newest = busy.commit({"new.py": "new = 1"}, summary="Newest change\n" + detail, stamp=STAMP - 1)
+    other = Repository(tmp_path / "other", origin="https://github.com/owner/other.git")
+    recent = other.commit({"recent.py": "recent = 1"}, summary="Recent independent work\n" + detail, stamp=STAMP - 100)
+    monkeypatch.setattr(sources, "MAX_BUNDLE_BYTES", 8000)
+
+    bundle = sources.collect(config(tmp_path), now=NOW)
+
+    retained = {item["source"].rsplit("@", 1)[-1] for item in evidence(bundle, "commit")}
+    assert retained == {newest, recent}
+    assert older not in retained
+
+
+def test_metadata_budget_prefers_unique_work_to_duplicate_clone_history(tmp_path, monkeypatch):
+    first = Repository(tmp_path / "a-original")
+    detail = "Routine implementation detail. " * 40
+    common = first.commit({"main.py": "common = 1"}, summary="Shared change\n" + detail, stamp=STAMP - 1)
+    clone = tmp_path / "b-copy"
+    first.run("clone", "--no-hardlinks", str(first.path), str(clone))
+    subprocess.run(["git", "-C", str(clone), "remote", "set-url", "origin",
+                    "https://github.com/Owner/Project.git"], check=True)
+    other = Repository(tmp_path / "c-independent", origin="https://github.com/owner/independent.git")
+    independent = other.commit({"other.py": "other = 1"}, summary="Independent change\n" + detail, stamp=STAMP - 100)
+    monkeypatch.setattr(sources, "MAX_BUNDLE_BYTES", 8000)
+
+    bundle = sources.collect(config(tmp_path), now=NOW)
+
+    assert {item["source"].rsplit("@", 1)[-1] for item in evidence(bundle, "commit")} == {common, independent}
+    assert {project["id"] for project in bundle["projects"]} == {
+        "git:github.com/owner/project", "git:github.com/owner/independent"}
+
+
 def test_nested_repository_and_worktree_are_discovered(tmp_path):
     parent = Repository(tmp_path / "parent")
     parent.commit({"main.py": "print('parent')"})
@@ -196,19 +232,37 @@ def test_missing_host_leaves_available_local_evidence_and_coverage(tmp_path, mon
 
 def test_remote_worker_expands_home_without_shell_and_preserves_host(tmp_path, monkeypatch):
     repo = Repository(tmp_path / "code" / "repo")
-    repo.commit({"main.py": "x = 1"}, summary="Remote authored work")
+    repo.commit({"main.py": "x = 1"}, summary="Remote authored work\napi_token=synthetic-private-value")
+    repo.commit({"private.py": "x = 2"}, summary="Blocked remote work")
     original = sources._run
     def local_transport(command, **kwargs):
         if command[0] == "ssh":
             assert "BatchMode=yes" in command and "StrictHostKeyChecking=yes" in command
-            return original(shlex.split(command[-1]), **{**kwargs, "env": {**os.environ, "HOME": str(tmp_path)}})
+            remote_command = shlex.split(command[-1])
+            # The remote worker must run with stdlib only, without site packages.
+            remote_command[1:1] = ["-I", "-S"]
+            return original(remote_command, **{**kwargs, "env": {**os.environ, "HOME": str(tmp_path)}})
         return original(command, **kwargs)
     monkeypatch.setattr(sources, "_run", local_transport)
-    settings = config(tmp_path, roots=[], remote_hosts=[{"name": "macbook.local", "root": "~/code"}])
+    settings = config(tmp_path, roots=[], remote_hosts=[{"name": "macbook.local", "root": "~/code"}],
+                      blocklist={"paths": ["private.py"]})
     bundle = sources.collect(settings, now=NOW)
     assert bundle["projects"][0]["hosts"] == ["macbook.local"]
     assert evidence(bundle, "commit")[0]["source"].startswith("macbook.local:")
     assert evidence(bundle, "commit")[0]["text"].startswith("Remote authored work")
+    assert "synthetic-private-value" not in json.dumps(bundle)
+    assert "api_token=[REDACTED_SECRET]" in evidence(bundle, "commit")[0]["text"]
+    assert "Blocked remote work" not in json.dumps(bundle)
+
+
+@pytest.mark.parametrize("returncode,error", [(1, "remote_worker_failed"), (255, "ssh_failed")])
+def test_remote_process_exit_distinguishes_worker_from_ssh(tmp_path, monkeypatch, returncode, error):
+    original = sources._run
+    def failing_transport(command, **kwargs):
+        return original([sys.executable, "-c", f"raise SystemExit({returncode})"], **kwargs)
+    monkeypatch.setattr(sources, "_run", failing_transport)
+    with pytest.raises(sources.BriefingSourceError, match=f"^{error}$"):
+        sources._remote({"name": "macbook.local", "root": "~/code"}, config(tmp_path), STAMP)
 
 
 def test_inventory_discovers_non_git_without_trusting_timestamps_or_suggestions(tmp_path):

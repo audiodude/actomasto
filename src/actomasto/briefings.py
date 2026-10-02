@@ -4,7 +4,7 @@ This module never opens the draft collector's Store or changes its controls.
 """
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 import hashlib
 import json
@@ -199,8 +199,13 @@ def run(config, *, kind, report_date=None, project=None, dry_run=False, send=Fal
         raise BriefingError('reentry_requires_project_only')
     if dry_run and send:
         raise BriefingError('dry_run_cannot_send')
+    priority_window = None
+    if kind in ('daily', 'weekly'):
+        end = datetime.combine(report_date, time.min, ZoneInfo(config['timezone']))
+        start = end - timedelta(days=7 if kind == 'weekly' else 1)
+        priority_window = (start, end)
     if dry_run:
-        bundle = collect(config, now=now, project=project)
+        bundle = collect(config, now=now, project=project, priority_window=priority_window)
         return prepare(bundle, kind=kind, report_date=report_date, timezone=config['timezone'], project=project)
     if not config['hosted_processing']:
         raise BriefingError('hosted_processing_not_authorized')
@@ -224,7 +229,7 @@ def run(config, *, kind, report_date=None, project=None, dry_run=False, send=Fal
                 raise BriefingError('briefing_monthly_budget_exhausted')
             if key in state['charges']:
                 raise BriefingError('generation_already_attempted_inspect_status')
-            bundle = collect(config, now=now, project=project)
+            bundle = collect(config, now=now, project=project, priority_window=priority_window)
             # Durably reserve before provider dispatch. Ambiguous attempts are not retried.
             state['charges'][key] = {'month': month, 'micro_usd': RESERVATION, 'estimated': True}
             _private_json(root / 'state.json', state)

@@ -48,6 +48,10 @@ _OID = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?\Z")
 class BriefingSourceError(RuntimeError):
     """Content-free source failure."""
 
+    def __init__(self, code, *, returncode=None):
+        super().__init__(code)
+        self.returncode = returncode
+
 
 def _id(*values):
     return hashlib.sha256(json.dumps(values, separators=(",", ":")).encode()).hexdigest()[:24]
@@ -100,7 +104,7 @@ def _run(command, *, timeout, limit=MAX_COMMAND_BYTES, payload=None, env=None):
                                         raise BriefingSourceError("source_size_limit")
                 code = process.wait(timeout=max(.01, deadline - time.monotonic()))
                 if code:
-                    raise BriefingSourceError("source_unavailable")
+                    raise BriefingSourceError("source_unavailable", returncode=code)
             except BaseException:
                 process.kill()
                 process.wait()
@@ -396,17 +400,25 @@ def _activity_key(project):
 
 
 def _retain_metadata(projects):
-    """Keep newest useful facts, while retaining lightweight Funes associations."""
+    """Prefer newest distinct facts; retain lightweight checkout associations."""
+    unique, duplicates, seen = [], [], set()
+    for project in projects:
+        for item in project["evidence"]:
+            target = duplicates if item["id"] in seen else unique
+            target.append((project, item))
+            seen.add(item["id"])
+        project["evidence"] = []
     remaining = MAX_BUNDLE_BYTES // 2
-    for project in sorted(projects, key=_activity_key, reverse=True):
-        retained = []
-        for item in sorted(project["evidence"], key=lambda value: value["time"] or "", reverse=True):
+    # Rank individual facts, not whole projects: older history in a busy project
+    # and repeated clone copies must not displace another project's recent work.
+    for candidates in (unique, duplicates):
+        for project, item in sorted(candidates, key=lambda pair: pair[1]["time"] or "", reverse=True):
             size = len(json.dumps(item).encode())
             if size <= remaining:
-                retained.append(item)
+                project["evidence"].append(item)
                 remaining -= size
-        project["evidence"] = retained
-        project["unfinished"] = [item["text"] for item in retained if item["kind"] == "working_tree"
+    for project in projects:
+        project["unfinished"] = [item["text"] for item in project["evidence"] if item["kind"] == "working_tree"
                                  and item["text"].startswith("Current uncommitted")]
 
 
@@ -504,7 +516,13 @@ def _remote(remote, config, now):
     command = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "-o", "ConnectionAttempts=1",
                "-o", "StrictHostKeyChecking=yes", "-o", "UpdateHostKeys=no", "-o", "ClearAllForwardings=yes",
                "-o", "PermitLocalCommand=no", "-T", "--", host, "python3 -c " + shlex.quote(launcher)]
-    raw = _run(command, timeout=MAX_REMOTE_SECONDS, limit=MAX_BUNDLE_BYTES + 65536, payload=payload)
+    try:
+        raw = _run(command, timeout=MAX_REMOTE_SECONDS, limit=MAX_BUNDLE_BYTES + 65536, payload=payload)
+    except BriefingSourceError as error:
+        if error.returncode is not None:
+            raise BriefingSourceError(
+                "ssh_failed" if error.returncode == 255 else "remote_worker_failed") from None
+        raise
     try:
         value = json.loads(raw)
     except (ValueError, UnicodeDecodeError):
@@ -607,7 +625,11 @@ def _conversations(config, projects, policy, now, coverage):
     if not harnesses or not config.get("funes"):
         coverage.append("Conversations unavailable: no separate briefing conversation enrollment; no raw private transcripts or pending collector units read.")
         return
-    cursors, size, count = {}, 0, 0
+    size, count = 0, 0
+    window = config.get("_priority_window")
+    passes = [(priority, harness) for priority in ((True, False) if window else (False,))
+              for harness in harnesses]
+    remaining_seconds = {harness: MAX_CONVERSATION_SECONDS for harness in harnesses}
     def check():
         if time.monotonic() >= deadline or count >= 300 or size >= MAX_CONVERSATION_BYTES:
             raise BriefingSourceError("conversation_limit")
@@ -617,13 +639,26 @@ def _conversations(config, projects, policy, now, coverage):
     def eligible(identity, start, end):
         return (identity in by_id and start <= end <= now
                 and (bool(config.get("_project")) or now - 30 * 86400 <= start))
+    def select_interval(start, end):
+        overlaps = bool(window and start < window[1] and end >= window[0])
+        return not window or overlaps == priority
     try:
         source = FunesSource(config["funes"], cancelled=check)
-        for harness in harnesses:
-            deadline = time.monotonic() + MAX_CONVERSATION_SECONDS
+        # Read the recap interval before older context, not inventory hash order.
+        # Both passes share the original byte, turn and per-harness time bounds.
+        for priority, harness in passes:
+            cursors = {}
+            started = time.monotonic()
+            deadline = started + remaining_seconds[harness]
             staged = []
+            source_errors = {}
+            def retain():
+                for project, value, source_id in staged:
+                    if source_id not in source_errors:
+                        project["evidence"].append(value)
             try:
-                for unit in source.collect(harness, repositories, cursors.get, cursors.__setitem__, eligible):
+                for unit in source.collect(harness, repositories, cursors.get, cursors.__setitem__, eligible,
+                                           source_errors=source_errors, select_interval=select_interval):
                     check()
                     count += 1
                     project = by_id[unit["repository_id"]]
@@ -648,35 +683,45 @@ def _conversations(config, projects, policy, now, coverage):
                         value = _evidence("conversation", item["provenance"], item["text"], source_ref,
                                           timestamp=item.get("event_time", unit["event_time"]), identity=item["id"])
                         value.pop("_paths")
-                        staged.append((project, value))
+                        staged.append((project, value, unit["source_id"]))
                 if source.status.get("coverage") != "current":
                     coverage.append(f"{harness} conversations unavailable: stale source coverage.")
                     continue
                 if (source.status.get("pending_turns", 0)
                         or any(status != "complete" and amount for status, amount in source.status.get("streams", {}).items())):
                     coverage.append(f"{harness}: partial coverage; only individually complete turns retained, pending/incomplete turns excluded.")
-                for project, value in staged:
-                    project["evidence"].append(value)
+                retain()
                 coverage.append(f"{harness}: complete Funes turns read with separate briefing consent; assistant statements remain historical reports, not verified outcomes.")
             except BriefingSourceError as error:
                 if str(error) == "conversation_limit":
-                    for project, value in staged:
-                        project["evidence"].append(value)
+                    retain()
                     coverage.append(f"{harness}: conversation time/size limit; validated complete turns retained with incomplete coverage.")
                 else:
                     coverage.append(f"{harness} conversations unavailable: unsafe source reference.")
-            except SourceError:
-                coverage.append(f"{harness} conversations unavailable: incompatible/stale source or revision; staged results excluded.")
+            except SourceError as error:
+                coverage.append(f"{harness} conversations unavailable: {error.code}; staged results excluded.")
+            finally:
+                remaining_seconds[harness] = max(0, remaining_seconds[harness] - (time.monotonic() - started))
+                if source_errors:
+                    reasons = ", ".join(f"{code}={sum(value == code for value in source_errors.values())}"
+                                        for code in sorted(set(source_errors.values())))
+                    coverage.append(f"{harness}: {len(source_errors)} conversation sources excluded ({reasons}); independent valid sources retained.")
     except SourceError:
         coverage.append("Conversations unavailable: incompatible read-only Funes configuration.")
 
 
-def collect(config: dict, *, now: datetime, project: str | None = None) -> dict:
+def collect(config: dict, *, now: datetime, project: str | None = None,
+            priority_window: tuple[datetime, datetime] | None = None) -> dict:
     """Collect filtered facts, current observations and explicitly enrolled turns."""
     from .policy import Policy, PolicyError
     if now.tzinfo is None or now.utcoffset() is None:
         raise BriefingSourceError("aware_time_required")
     config = {**config, "_project": project}
+    if priority_window is not None:
+        start, end = priority_window
+        if start.utcoffset() is None or end.utcoffset() is None or start >= end:
+            raise BriefingSourceError("invalid_priority_window")
+        config["_priority_window"] = (start.timestamp(), end.timestamp())
     try:
         policy = Policy(config)
     except (PolicyError, TypeError, AttributeError):
@@ -695,11 +740,18 @@ def collect(config: dict, *, now: datetime, project: str | None = None) -> dict:
             coverage.extend(remote_bundle["coverage"])
             if project:
                 config["_project_ids"] = list({item["id"] for item in raw_projects})
-        except BriefingSourceError:
+        except BriefingSourceError as error:
             host = remote.get("name", "remote")
             if not isinstance(host, str) or not re.fullmatch(r"[A-Za-z0-9_.@-]{1,253}", host):
                 host = "remote"
-            coverage.append(f"{host}: unavailable (read-only SSH failed or timed out); no inference of inactivity.")
+            reason = {
+                "ssh_failed": "SSH transport or authentication failed",
+                "remote_worker_failed": "remote command failed after SSH connected",
+                "source_timeout": "remote collection timed out",
+                "source_size_limit": "remote response exceeded its size bound",
+                "invalid_remote_response": "remote worker returned an invalid response",
+            }.get(str(error), "remote collection could not run")
+            coverage.append(f"{host}: unavailable ({reason}); no inference of inactivity.")
     if len(remotes) > MAX_REMOTE_HOSTS:
         coverage.append("Remote host count capped.")
     raw_projects.extend(_inventory(config, policy, coverage))

@@ -8,8 +8,6 @@ import re
 from collections import Counter
 from pathlib import PurePosixPath
 
-from detect_secrets.plugins.high_entropy_strings import HighEntropyStringsPlugin
-
 POLICY_VERSION = "2:detect-secrets-1.5.0"
 MAX_UNIT_BYTES = 32 * 1024 * 1024
 SECRET = "[REDACTED_SECRET]"
@@ -116,6 +114,8 @@ class Policy:
 
     def _redact(self, text: str, remove_paths: bool) -> str:
         try:
+            from detect_secrets.plugins.high_entropy_strings import HighEntropyStringsPlugin
+
             plugins = self._detectors()
             spans = [(m.start(), m.end()) for m in _PRIVATE_KEY.finditer(text)]
             spans.extend((m.start("value"), m.end("value")) for m in _ASSIGNMENT.finditer(text))

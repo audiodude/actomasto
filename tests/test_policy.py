@@ -103,6 +103,22 @@ def test_detector_failure_blocks_even_ordinary_text(monkeypatch):
         policy.output("A safe cache update", "github.com/demo/public")
 
 
+def test_missing_detector_package_blocks_local_content(monkeypatch):
+    import builtins
+
+    original = builtins.__import__
+    def without_detector(name, *args, **kwargs):
+        if name == "detect_secrets" or name.startswith("detect_secrets."):
+            raise ModuleNotFoundError(name)
+        return original(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", without_detector)
+    policy = Policy({})
+    assert policy.filter(unit("An ordinary update")) is None
+    with pytest.raises(PolicyError, match="detector_failure"):
+        policy.output("An ordinary update", "github.com/demo/public")
+
+
 def test_no_detector_network_verification(monkeypatch):
     import socket
     import requests

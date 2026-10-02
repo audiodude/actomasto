@@ -17,6 +17,12 @@ MAX_RESPONSE_BYTES = 256 * 1024 * 1024
 _HEX = re.compile(r"[0-9a-f]{64}\Z")
 _STREAM_STATUS = {"complete", "incomplete_turn", "incomplete_write", "deferred_future",
                   "malformed_record", "oversized_source"}
+_SOURCE_ERRORS = frozenset({
+    "source_missing", "source_unavailable", "source_changed", "source_capacity",
+    "oversized_source", "oversized_response", "unsupported_version", "missing_session_header",
+    "unknown_content_schema", "unknown_session_schema", "unknown_provenance_schema",
+    "unknown_project_schema", "unknown_branch_lineage",
+})
 
 
 class SourceError(Exception):
@@ -39,17 +45,11 @@ def _repository(cwd, repositories):
     if not isinstance(cwd, str) or not os.path.isabs(cwd):
         return None
     directory = Path(cwd).resolve()
-    matches = []
-    for repository in repositories:
-        for root in repository.get("paths", []):
-            path = Path(root).resolve()
-            if directory == path or path in directory.parents:
-                matches.append((len(path.parts), repository["id"]))
-    if not matches:
-        return None
-    depth = max(item[0] for item in matches)
-    identities = {identity for size, identity in matches if size == depth}
-    return identities.pop() if len(identities) == 1 else None
+    for path in (directory, *directory.parents):
+        identities = repositories.get(path)
+        if identities:
+            return next(iter(identities)) if len(identities) == 1 else None
+    return None
 
 
 class FunesSource:
@@ -245,11 +245,25 @@ class FunesSource:
                 raise SourceError("invalid_cursor")
             visited.add(cursor)
 
-    def collect(self, client, repositories, cursor_get, cursor_set, eligible, seen=None):
+    def collect(self, client, repositories, cursor_get, cursor_set, eligible, seen=None, *,
+                source_errors=None, select_interval=None):
+        """Yield complete units; optional source_errors isolates failed originals.
+
+        Isolating callers must discard units whose source_id appears in that map.
+        Protocol, inventory freshness and enrollment failures still abort the harness.
+        The durable draft collector retains its strict default behavior.
+        select_interval optionally selects whole eligible turns without marking
+        unselected turns consumed; authorization still checks every message.
+        """
         if not self.supported:
             self.capabilities()
         if self.supported.get(client) != VERSIONS.get(client):
             raise SourceError("incompatible_harness")
+        # Resolve discovered roots once, not once per boundary in every turn.
+        roots = {}
+        for repository in repositories:
+            for root in repository.get("paths", []):
+                roots.setdefault(Path(root).resolve(), set()).add(repository["id"])
         checkpoint = "funes-enumeration:" + client
         saved = cursor_get(checkpoint) or {}
         cursor = saved.get("cursor")
@@ -282,85 +296,101 @@ class FunesSource:
                         or not isinstance(source.get("revision"), str)):
                     raise SourceError("invalid_response")
                 if source["state"] == "missing":
+                    if source_errors is not None:
+                        source_errors[source["id"]] = "source_missing"
                     self.status["streams"]["source_missing"] = self.status["streams"].get("source_missing", 0) + 1
                     continue
-                offset = 0
-                while True:
-                    turns = self.request("turns", source_id=source["id"], revision=source["revision"], offset=offset, limit=64)
-                    status = turns.get("status")
-                    if not isinstance(status, str) or status not in _STREAM_STATUS:
-                        raise SourceError(status)
-                    if (not isinstance(turns.get("turns"), list) or len(turns["turns"]) > 64
-                            or type(turns.get("pending_turns")) is not int or turns["pending_turns"] < 0):
-                        raise SourceError("invalid_response")
-                    for raw_turn in turns["turns"]:
-                        turn = self._turn(raw_turn, client)
-                        marker = f"adapter-unit:{client}:{turn['id']}"
-                        self._check()
-                        if cursor_get(marker):
-                            continue
-                        reason = None
-                        start, end = turn["start"], turn["end"]
-                        associations = {_repository(boundary["cwd"], repositories) for boundary in turn["boundaries"]}
-                        repository = next(iter(associations)) if len(associations) == 1 else None
-                        if (turn["invalid"] or start is None or end is None or start > end or not repository
-                                or any(boundary["invalid"] or boundary["time"] is None for boundary in turn["boundaries"])):
-                            reason = "ambiguous_turn"
-                        elif end > time.time():
-                            continue
-                        elif not eligible(repository, start, end):
-                            reason = "ineligible_interval"
-                        elif any(item["time"] is None or not eligible(repository, item["time"], item["time"])
-                                 for item in turn["items"]):
-                            reason = "ineligible_message"
-                        elif turn["bytes"] > MAX_TURN_BYTES:
-                            reason = "oversized_source"
-                        elif not turn["items"] or turn["items"][0]["role"] != "user":
-                            reason = "unknown_provenance"
-                        if reason:
-                            self._check()
-                            cursor_set(marker, {"reason": reason})
-                            continue
-                        unit = {"id": turn["id"], "repository_id": repository, "kind": "conversation",
-                                "event_time": start, "event_end": end, "equivalent_id": None,
-                                "source_ref": {"client": client, "session_id": turn["session_id"],
-                                               "message_ids": turn["message_ids"]},
-                                "paths": [], "adapter": client, "adapter_version": VERSIONS[client], "partial_source": False}
-                        if seen is None or not seen(unit):
-                            result = self.request("read", source_id=source["id"], revision=source["revision"], ordinal=turn["ordinal"])
-                            original = self._turn(result.get("turn"), client, content=True)
-                            metadata = {**original, "items": [{k: v for k, v in item.items() if k != "text"} for item in original["items"]]}
-                            if metadata != turn:
-                                raise SourceError("source_changed")
-                            unit["items"] = [{"id": item["id"], "text": item["text"],
-                                              "provenance": "user_reported" if item["role"] == "user" else "assistant_reported",
-                                              "event_time": item["time"],
-                                              "source_ref": {"client": client, "session_id": turn["session_id"],
-                                                             "message_ids": [item["message_id"]]}}
-                                             for item in original["items"] if item["text"]]
-                            if not unit["items"] or unit["items"][0]["provenance"] != "user_reported":
-                                self._check()
-                                cursor_set(marker, {"reason": "unknown_provenance"})
-                                continue
-                            self._check()
-                            yield unit
-                        self._check()
-                        cursor_set(marker, {"reason": "collected"})
-                    next_offset = turns.get("next_offset")
-                    if next_offset is None:
-                        self.status["pending_turns"] += turns["pending_turns"]
-                        self.status["streams"][status] = self.status["streams"].get(status, 0) + 1
-                        break
-                    if type(next_offset) is not int or next_offset <= offset:
-                        raise SourceError("invalid_response")
-                    offset = next_offset
+                try:
+                    yield from self._collect_source(source, client, roots, cursor_get, cursor_set,
+                                                    eligible, seen, select_interval)
+                except SourceError as exc:
+                    if source_errors is None or exc.code not in _SOURCE_ERRORS:
+                        raise
+                    source_errors[source["id"]] = exc.code
+                    self.status["streams"][exc.code] = self.status["streams"].get(exc.code, 0) + 1
             cursor = page["next_cursor"]
             self._check()
             cursor_set(checkpoint, {"cursor": cursor, "snapshot": page["snapshot"], "scope_id": page["scope_id"]})
             if cursor is None:
-                if self.status["streams"].get("source_missing"):
+                if source_errors is None and self.status["streams"].get("source_missing"):
                     raise SourceError("source_missing")
                 return
             if cursor in visited:
                 raise SourceError("invalid_cursor")
             visited.add(cursor)
+
+    def _collect_source(self, source, client, repositories, cursor_get, cursor_set, eligible, seen, select_interval):
+        offset = 0
+        while True:
+            turns = self.request("turns", source_id=source["id"], revision=source["revision"], offset=offset, limit=64)
+            status = turns.get("status")
+            if not isinstance(status, str) or status not in _STREAM_STATUS:
+                raise SourceError(status)
+            if (not isinstance(turns.get("turns"), list) or len(turns["turns"]) > 64
+                    or type(turns.get("pending_turns")) is not int or turns["pending_turns"] < 0):
+                raise SourceError("invalid_response")
+            for raw_turn in turns["turns"]:
+                turn = self._turn(raw_turn, client)
+                marker = f"adapter-unit:{client}:{turn['id']}"
+                self._check()
+                if cursor_get(marker):
+                    continue
+                reason = None
+                start, end = turn["start"], turn["end"]
+                if (select_interval is not None and start is not None and end is not None
+                        and not select_interval(start, end)):
+                    continue
+                associations = {_repository(boundary["cwd"], repositories) for boundary in turn["boundaries"]}
+                repository = next(iter(associations)) if len(associations) == 1 else None
+                if (turn["invalid"] or start is None or end is None or start > end or not repository
+                        or any(boundary["invalid"] or boundary["time"] is None for boundary in turn["boundaries"])):
+                    reason = "ambiguous_turn"
+                elif end > time.time():
+                    continue
+                elif not eligible(repository, start, end):
+                    reason = "ineligible_interval"
+                elif any(item["time"] is None or not eligible(repository, item["time"], item["time"])
+                         for item in turn["items"]):
+                    reason = "ineligible_message"
+                elif turn["bytes"] > MAX_TURN_BYTES:
+                    reason = "oversized_source"
+                elif not turn["items"] or turn["items"][0]["role"] != "user":
+                    reason = "unknown_provenance"
+                if reason:
+                    self._check()
+                    cursor_set(marker, {"reason": reason})
+                    continue
+                unit = {"id": turn["id"], "source_id": source["id"],
+                        "repository_id": repository, "kind": "conversation",
+                        "event_time": start, "event_end": end, "equivalent_id": None,
+                        "source_ref": {"client": client, "session_id": turn["session_id"],
+                                       "message_ids": turn["message_ids"]},
+                        "paths": [], "adapter": client, "adapter_version": VERSIONS[client], "partial_source": False}
+                if seen is None or not seen(unit):
+                    result = self.request("read", source_id=source["id"], revision=source["revision"], ordinal=turn["ordinal"])
+                    original = self._turn(result.get("turn"), client, content=True)
+                    metadata = {**original, "items": [{k: v for k, v in item.items() if k != "text"} for item in original["items"]]}
+                    if metadata != turn:
+                        raise SourceError("source_changed")
+                    unit["items"] = [{"id": item["id"], "text": item["text"],
+                                      "provenance": "user_reported" if item["role"] == "user" else "assistant_reported",
+                                      "event_time": item["time"],
+                                      "source_ref": {"client": client, "session_id": turn["session_id"],
+                                                     "message_ids": [item["message_id"]]}}
+                                     for item in original["items"] if item["text"]]
+                    if not unit["items"] or unit["items"][0]["provenance"] != "user_reported":
+                        self._check()
+                        cursor_set(marker, {"reason": "unknown_provenance"})
+                        continue
+                    self._check()
+                    yield unit
+                self._check()
+                cursor_set(marker, {"reason": "collected"})
+            next_offset = turns.get("next_offset")
+            if next_offset is None:
+                self.status["pending_turns"] += turns["pending_turns"]
+                self.status["streams"][status] = self.status["streams"].get(status, 0) + 1
+                break
+            if type(next_offset) is not int or next_offset <= offset:
+                raise SourceError("invalid_response")
+            offset = next_offset

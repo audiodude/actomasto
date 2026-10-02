@@ -375,3 +375,91 @@ def test_missing_enrolled_root_is_unavailable_not_empty_activity(tmp_path, funes
     source.root.mkdir()
     source.write(source.records)
     assert source.read()[0]['items'][0]['text'] == 'Explain the cache change.'
+
+
+@pytest.mark.parametrize("failure", ["unknown_content_schema", "source_changed", "invalid_response"])
+def test_briefing_isolates_failed_originals_not_protocol_errors(tmp_path, funes_bin, monkeypatch, failure):
+    from actomasto.briefing_sources import _conversations
+    from actomasto.policy import Policy
+
+    source = Source(tmp_path, 'omp', funes_bin)
+    source.refresh()
+    broken_id = source.api.request('enumerate', harness='omp')['sources'][0]['id']
+    healthy = copy.deepcopy(source.records)
+    next(row for row in healthy if row.get('type') == 'session')['id'] = 'independent-session'
+    (source.root / 'healthy.jsonl').write_text(
+        ''.join(json.dumps(row) + '\n' for row in healthy))
+    if failure == 'unknown_content_schema':
+        broken = copy.deepcopy(source.records)
+        broken[-1]['message']['content'].append({'type': 'future_private_payload', 'text': 'UNSAFE'})
+        source.write(broken)
+    source.refresh()
+    original_request = FunesSource.request
+
+    def request(self, op, **fields):
+        if failure != 'unknown_content_schema' and op == 'turns' and fields['source_id'] == broken_id:
+            if fields.get('offset', 0):
+                raise SourceError(failure)
+            result = original_request(self, op, **fields)
+            # Fail on a later page after the first complete unit was staged.
+            return {**result, 'next_offset': 64}
+        return original_request(self, op, **fields)
+
+    monkeypatch.setattr(FunesSource, 'request', request)
+    projects = [{'id': 'github.com:1', '_display': 'public',
+                 '_locations': [['local', str(source.repo)]], 'evidence': []}]
+    settings = {'funes': source.config, 'conversation_harnesses': ['omp']}
+    coverage = []
+    _conversations(settings, projects, Policy(settings), START + 10, coverage)
+    evidence = projects[0]['evidence']
+    if failure == 'invalid_response':
+        assert evidence == []
+        assert any('invalid_response' in note for note in coverage)
+    else:
+        assert [item['text'] for item in evidence] == [
+            'Explain the cache change.', 'I am checking cache invalidation.', 'I fixed cache invalidation.']
+        assert all('independent-session' in item['source'] for item in evidence)
+        assert any(failure + '=1' in note for note in coverage)
+
+
+@pytest.mark.parametrize("window_offset", [0, 1])
+def test_briefing_reads_recap_turns_before_older_context(tmp_path, funes_bin, monkeypatch, window_offset):
+    from actomasto import briefing_sources
+    from actomasto.policy import Policy
+
+    source = Source(tmp_path, 'omp', funes_bin)
+    source.refresh()
+    old_id = source.api.request('enumerate', harness='omp')['sources'][0]['id']
+    newer = copy.deepcopy(source.records)
+    for row in newer:
+        if row.get('type') == 'session':
+            row['id'] = 'newer-session'
+        if 'timestamp' in row:
+            row['timestamp'] = row['timestamp'].replace('2026-01-01', '2026-01-02')
+        message = row.get('message', {})
+        for key in ('timestamp', 'completedAt'):
+            if key in message:
+                message[key] += 86400 * 1000
+        if message.get('role') == 'user':
+            message['content'] = [{'type': 'text', 'text': 'Explain the newer work.'}]
+    (source.root / 'newer.jsonl').write_text(''.join(json.dumps(row) + '\n' for row in newer))
+    source.refresh()
+    original_request = FunesSource.request
+
+    def request(self, op, **fields):
+        result = original_request(self, op, **fields)
+        if op == 'enumerate':
+            result['sources'].sort(key=lambda item: item['id'] != old_id)
+        return result
+
+    monkeypatch.setattr(FunesSource, 'request', request)
+    texts = ['Explain the newer work.', 'I am checking cache invalidation.', 'I fixed cache invalidation.']
+    monkeypatch.setattr(briefing_sources, 'MAX_CONVERSATION_BYTES', sum(len(text.encode()) for text in texts))
+    projects = [{'id': 'github.com:1', '_display': 'public',
+                 '_locations': [['local', str(source.repo)]], 'evidence': []}]
+    settings = {'funes': source.config, 'conversation_harnesses': ['omp'],
+                '_priority_window': (START + 86400 + window_offset, START + 2 * 86400)}
+    coverage = []
+    briefing_sources._conversations(settings, projects, Policy(settings), START + 86410, coverage)
+    assert [item['text'] for item in projects[0]['evidence']] == texts
+    assert all('newer-session' in item['source'] for item in projects[0]['evidence'])

@@ -69,6 +69,14 @@ actomasto briefing show daily-2026-09-24
 - Repeated runs reuse the same mode/date/project archive. Configuration changes
   invalidate reuse. Failed or uncertain generation and delivery attempts are not
   automatically retried; inspect `briefing status` before recovery.
+- Daily/weekly collection prioritizes conversations overlapping the recap window
+  before older context, within the same read bounds. Git metadata budgets prefer
+  recent distinct facts over duplicate worktree history.
+- An unreadable or unsupported conversation source excludes that original, not
+  every conversation from its harness. Coverage lists the source error codes;
+  protocol, enrollment and stale-inventory failures still exclude the affected
+  harness. Unsupported originals are not reinterpreted, and incomplete coverage
+  is not evidence of inactivity. Draft collection retains its stricter behavior.
 
 ### Email and scheduling
 
@@ -138,6 +146,12 @@ Optional configuration fields:
 | `funes` | `{ "executable": "/absolute/funes", "corpus": "/absolute/corpus", "scope": "/absolute/enrollment.json" }` |
 | `conversation_harnesses` | Explicitly opted-in subset of `["claude","codex","omp"]`; requires `funes` configuration and an independently refreshed corpus |
 | `mailgun` | `{ "domain": "mail.example.com", "sender": "reports@example.com", "recipient": "you@example.com", "region": "US" }`; region is `US` or `EU` |
+
+Remote collection uses Python's standard library; no Actomasto package or
+`detect-secrets` installation is required on the remote host. Repository/path
+exclusions run there before content reads, and full secret filtering runs locally
+before evidence is used. Coverage distinguishes SSH failures, remote-command
+failures, timeouts, and invalid or oversized responses.
 
 Email additionally requires `MAILGUN_API_KEY` in the environment or private
 `briefing-credentials.env`. Mailgun configuration is unnecessary for local
