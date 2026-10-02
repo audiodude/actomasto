@@ -231,6 +231,25 @@ history, Funes data, or spending/processing records.
 - **Run tests:** `uv run --locked pytest -q`. Set `FUNES_TEST_BIN` to an absolute
   maintained-fork executable to include real Funes subprocess tests.
 
+### October 2 stable 18.4.12 dependency refresh
+
+The `update-20261002-stable18412` worktree starts from current main
+`6586f59`, preserving the briefing activity-coverage and draft-source-health
+fixes rather than reverting to the previous upgrade's older source lineage.
+`git pull --ff-only origin main` was already up to date. A compatible
+`uv lock --upgrade --refresh` updates only `charset-normalizer` from 3.5.1
+to 3.5.2; `uv sync --locked` prepares the worktree's `.venv` on Python 3.13.12.
+See the [verification record](verification/dependencies-20261002-stable18412.json)
+for full-suite and isolated CLI/Funes consumer evidence.
+
+During service cutover, use this checkout's `.venv/bin/actomasto` for the
+collector and both daily/weekly briefing units; the briefing commands retain
+their existing `--send` option. The independent `funes-source-refresh.service`
+uses `~/.local/lib/funes-source/refresh-actomasto`, whose pinned Funes executable
+must stay consistent with the collector and briefing configurations. Preparing
+this environment does not rewrite units, restart services, post to Mastodon,
+send email, or upload/publish any corpus.
+
 [Detailed operation and architecture](mastodon-activity-app-notes.md#14-running-the-implementation)
 · [Funes integration](funes-integration-plan.md)
 · [Verification records](verification/)

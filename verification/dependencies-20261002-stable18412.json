@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-02",
+  "assistance": "OpenAI Codex",
+  "stack_target": "OMP 18.4.12",
+  "base_revision": "6586f59",
+  "base_choice": "Current clean main preserves briefing activity coverage and draft-source-health fixes; previous c53bea1 upgrade lineage was not substituted.",
+  "pull": "git pull --ff-only origin main: Already up to date.",
+  "dependency_refresh": {
+    "command": "uv lock --upgrade --refresh",
+    "resolved_packages": 20,
+    "changes": {"charset-normalizer": {"before": "3.5.1", "after": "3.5.2"}},
+    "python": "3.13.12",
+    "installation": "/home/tmoney/code/vibes/actomasto/.worktrees/update-20261002-stable18412/.venv/bin/actomasto"
+  },
+  "tests": {
+    "command": "FUNES_TEST_BIN=/home/tmoney/.local/lib/funes-source/e5783df5eaa5cde5c38e2f0d8c808f0448ff48d9/funes uv run --locked pytest -q",
+    "output": "430 passed in 61.84s (0:01:01)",
+    "passed": 430,
+    "failed": 0,
+    "skipped": 0,
+    "funes_binary_sha256": "c4c1fb5c8658f2a06db75c1c757c96f4c075d1422b885f22ebf2157a1c2d94a1"
+  },
+  "cli_smoke": {
+    "isolation": "Temporary HOME and XDG_CONFIG_HOME/XDG_DATA_HOME/XDG_RUNTIME_DIR",
+    "commands": ["actomasto --help", "actomasto briefing --help", "actomasto status --json", "actomasto list --json"],
+    "all_exit_codes": 0,
+    "observations": {"enabled": false, "process_running": false, "queue_count": 0, "list": []}
+  },
+  "integration_smoke": {
+    "funes_binary": "/home/tmoney/code/forks/funes/target/debug/funes",
+    "revision": "65611ba8f0fc486ce4bfd8ad92953b82b86b8037",
+    "sha256": "326ff1c9305c340a5d8f7b2d792c500103fc1e8c60403a592aba478281c4d42b",
+    "capabilities": {"protocol": 1, "build_revision": "65611ba8f0fc486ce4bfd8ad92953b82b86b8037", "identity": "actomasto-v1", "local_only": true, "revision_bound": true},
+    "source": "Authored synthetic OMP fixture in a temporary corpus and enrollment",
+    "units": 1,
+    "exact_text": true,
+    "restart_deduplication": true,
+    "original_unchanged": true
+  },
+  "service_cutover": {
+    "collector": "actomasto.service: new .venv/bin/actomasto daemon",
+    "daily": "actomasto-briefing-daily.service: new .venv/bin/actomasto briefing run daily --send",
+    "weekly": "actomasto-briefing-weekly.service: new .venv/bin/actomasto briefing run weekly --send",
+    "source_exporter": "funes-source-refresh.service runs /home/tmoney/.local/lib/funes-source/refresh-actomasto; its executable pin must match config.toml and briefings.json"
+  },
+  "safety": {
+    "live_config_changed": false,
+    "service_units_changed": false,
+    "services_restarted": false,
+    "mastodon_posting": false,
+    "email_sent": false,
+    "hosted_model_requests": false,
+    "hugging_face_uploads_or_publication": false
+  }
+}
