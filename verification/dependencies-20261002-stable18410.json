@@ -1,0 +1,96 @@
+{
+  "date": "2026-10-02",
+  "assistance": "OpenAI Codex",
+  "branch": "update-20261002-stable18410",
+  "preserved_actomasto_revision": "aa1f5686b2ced55d5bfd833a5307a1e055c97c43",
+  "upstream_main": "2cb9b410d1073eb607acad60fa8d791532dfab66",
+  "upstream_integration": "Fetched origin; origin/main is already ancestor of preserved custom base, so no redundant merge was created.",
+  "python": {
+    "version": "3.13.12",
+    "uv": "0.11.3",
+    "dependency_refresh": "uv lock --upgrade --refresh resolved 20 packages; parsed lock comparison found no compatible version changes or removed packages.",
+    "environment": "uv sync --locked created a fresh .venv and installed 19 packages including editable actomasto.",
+    "executable": "/home/tmoney/code/vibes/actomasto/.worktrees/update-20261002-stable18410/.venv/bin/actomasto",
+    "tests": {
+      "passed": 415,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 8.88
+    },
+    "test_command": "FUNES_TEST_BIN=/home/tmoney/code/forks/funes/.worktrees/update-20261002-stable18410/target/d03a2fcf3bc29bb81777907018fbc9bdef06d012/funes uv run --locked pytest -q",
+    "build": "uv build: dist/actomasto-0.1.0.tar.gz and dist/actomasto-0.1.0-py3-none-any.whl succeeded",
+    "cli_smoke": "Actual .venv/bin/actomasto help, init, config validate, status, off, list and missing show; isolated disabled daemon readiness and SIGTERM."
+  },
+  "scope": {
+    "root_checkout_changes": false,
+    "service_or_live_configuration_mutation": false,
+    "hosted_model_requests": false,
+    "mastodon_posts": false,
+    "email_sends": false,
+    "uploads_or_remote_binding": false,
+    "deployment": false,
+    "release_publication": false
+  },
+  "funes": {
+    "revision": "d03a2fcf3bc29bb81777907018fbc9bdef06d012",
+    "executable": "/home/tmoney/code/forks/funes/.worktrees/update-20261002-stable18410/target/d03a2fcf3bc29bb81777907018fbc9bdef06d012/funes",
+    "capabilities": {
+      "protocol": 1,
+      "build_revision": "d03a2fcf3bc29bb81777907018fbc9bdef06d012",
+      "identity": "actomasto-v1",
+      "harnesses": {
+        "claude": "claude-schema2",
+        "codex": "codex-0.144.1-schema1",
+        "omp": "omp-session3-schema1"
+      },
+      "local_only": true,
+      "metadata_only": true,
+      "revision_bound": true,
+      "snapshot_enumeration": true,
+      "coverage_freshness": true
+    }
+  },
+  "isolated_daemon": {
+    "ready": true,
+    "process_running": true,
+    "enabled": false,
+    "active_login": false,
+    "clean_sigterm_exit": true,
+    "control_socket_removed": true,
+    "offline_status_after_exit": true,
+    "missing_show_exit": 3,
+    "scope": "Temporary HOME/XDG directories, empty enrollment, no credentials, no-session loginctl shim",
+    "limits": "No actual logind sessions or enabled hosted generation exercised"
+  },
+  "omp": {
+    "version": "18.4.10",
+    "source_revision": "850ac44945e15c5d13eade0a552e127eabed7894",
+    "fixture_directory": "/tmp/omp-stack-18410-xkinhP",
+    "fixture_authoring": "Integration owner supplied completed and aborted native synthetic lifecycle transcripts; this worker consumed byte-identical copies through actual FunesSource.collect."
+  },
+  "native_consumer": [
+    {
+      "kind": "complete",
+      "sha256": "e88e62c26b393a6faa4d95f9193168815df184bc1214014aae4bafa6e2fd616b",
+      "units": 1,
+      "pending_turns": 0,
+      "exact_text_provenance_identity": true,
+      "restart_deduplication": true,
+      "terminal_interval_exclusion": true,
+      "original_unchanged": true
+    },
+    {
+      "kind": "aborted",
+      "sha256": "42d3e4aa9cf5d427150320260d489546d2570511d40896f90a1bf0b50a92bc00",
+      "units": 0,
+      "pending_turns": 1,
+      "original_unchanged": true
+    }
+  ],
+  "evidence": {
+    "cli": "/tmp/actomasto-20261002-evidence/cli.log",
+    "daemon": "/tmp/actomasto-20261002-evidence/daemon.log",
+    "native_consumer": "/tmp/actomasto-20261002-evidence/native-consumer.json",
+    "smoke": "/tmp/actomasto-20261002-evidence/smoke.json"
+  }
+}

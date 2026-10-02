@@ -160,7 +160,7 @@ under `~/.local/share/actomasto/briefings/` (or
 Draft collection uses separate configuration (`config.toml`) and controls.
 Set up Funes enrollment and refresh before enabling collection.
 
-The maintained Funes fork must implement [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The pinned dependency revision is `eee23d57b6a5895b23898792728c880b3fdd25f8`; do not substitute an upstream binary without these capabilities.
+The maintained Funes fork must implement [source protocol 1](https://github.com/audiodude/funes/blob/main/docs/local-source.md). The pinned dependency revision is `d03a2fcf3bc29bb81777907018fbc9bdef06d012`; do not substitute an upstream binary without these capabilities.
 
 Build Funes independently (previous builds used Rust 1.98.0, protoc, and lld on Linux), then use the absolute path to its `target/debug/funes`. Check out the pinned revision above in a separate Funes source worktree before building; a source commit is not a published binary.
 
@@ -558,3 +558,29 @@ restart deduplication, interval exclusion, and unchanged originals. The aborted
 turn emitted no unit and remained pending. No live state, service configuration,
 Mastodon posting, email sends, hosted model requests, uploads, remote binding,
 or deployment were changed by this worker. Assisted by OpenAI Codex.
+
+### October 2 stable 18.4.10 integration
+
+The `update-20261002-stable18410` worktree preserves the custom Actomasto base
+`aa1f5686b2ced55d5bfd833a5307a1e055c97c43`. After fetching origin, main at
+`2cb9b410d1073eb607acad60fa8d791532dfab66` was already an ancestor, so no
+redundant merge was needed. `uv lock --upgrade --refresh` resolved 20 packages
+with no newer compatible versions; `uv sync --locked` created a fresh Python
+3.13.12 environment.
+
+The [stable 18.4.10 verification](verification/dependencies-20261002-stable18410.json)
+records 415 passing tests with the rebuilt Funes revision
+`d03a2fcf3bc29bb81777907018fbc9bdef06d012`, successful wheel/source-distribution
+builds, and actual CLI/daemon probes. The isolated disabled daemon reached
+readiness, answered status/off/list, exited cleanly on SIGTERM, removed its
+control socket, and allowed offline status afterward. Native OMP 18.4.10
+completed and aborted synthetic transcripts passed the real Funes consumer:
+exact text/provenance/identity, restart deduplication, terminal interval
+exclusion, and unchanged originals. The aborted turn remained pending and
+emitted no unit.
+
+Daemon verification used temporary HOME/XDG paths, empty enrollment, no
+credentials, and a no-session `loginctl` shim; real logind sessions and enabled
+hosted generation were not exercised. No live services/configuration, model
+requests, generated reports, email, posting, uploads, remote binding, or release
+publication were performed. Assisted by OpenAI Codex.
