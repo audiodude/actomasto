@@ -115,6 +115,7 @@ class Store:
             self.db.executemany("INSERT INTO adapters VALUES(?,0) "
                                 "ON CONFLICT(adapter) DO UPDATE SET healthy=0",
                                 [(client,) for client in ("claude", "codex", "omp")])
+            self.db.execute("DELETE FROM source_cursors WHERE key LIKE 'funes-health:%'")
         self._permissions()
 
     def _permissions(self):
@@ -461,6 +462,41 @@ class Store:
     def seen(self, unit):
         return self._seen(unit)
 
+    @_locked
+    def bind_sources(self, units, source_ids, epoch):
+        """Upgrade retained references without resetting queue lifecycle state."""
+        with self._transaction():
+            if self._settings()["epoch"] != epoch:
+                return False
+            updates = []
+            for unit in units:
+                row = self.db.execute("SELECT payload FROM pending_units WHERE id=?", (unit["id"],)).fetchone()
+                if row is None:
+                    return False
+                payload = json.loads(row["payload"])
+                if (payload.get("source_ref") != unit.get("source_ref")
+                        or payload.get("adapter") != unit.get("adapter")
+                        or payload.get("source_id") not in (None, source_ids[unit["id"]])):
+                    return False
+                payload["source_id"] = source_ids[unit["id"]]
+                encoded = _json(payload)
+                updates.append((encoded, len(encoded.encode()), unit["id"]))
+            self.db.executemany("UPDATE pending_units SET payload=?,bytes=? WHERE id=?", updates)
+            return True
+
+    @_locked
+    def set_source_health(self, client, source_ids, healthy, epoch, revision):
+        """Authorize supporting originals for this process and control revision."""
+        with self._transaction():
+            settings = self._settings()
+            if settings["epoch"] != epoch or settings["config_revision"] != revision:
+                return False
+            status = _json({"healthy": healthy, "epoch": epoch, "config_revision": revision})
+            self.db.executemany(
+                "INSERT INTO source_cursors VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                [(f"funes-health:{client}:{identity}", status) for identity in source_ids])
+            return True
+
     def _mark(self, unit, reason):
         if not re.fullmatch(r"[a-z_]{1,60}", reason):
             raise ValueError("invalid_marker_reason")
@@ -629,11 +665,16 @@ class Store:
             row = self.db.execute("SELECT * FROM pending_units WHERE id=?", (identity,)).fetchone()
             if not row or row["expires_at"] <= now or row["ready_at"] > now:
                 return False
-            health = self.db.execute("SELECT healthy FROM adapters WHERE adapter=?", (row["adapter"],)).fetchone()
-            if row["adapter"] in ("claude", "codex", "omp") and (
-                    not health or settings.get("funes_migration") == "pending"
-                    or settings["config"].get("version") != 2):
-                return False
+            unit = json.loads(row["payload"])
+            conversation = row["adapter"] in ("claude", "codex", "omp")
+            health = None if conversation else self.db.execute(
+                "SELECT healthy FROM adapters WHERE adapter=?", (row["adapter"],)).fetchone()
+            if conversation:
+                checked = self.cursor(f"funes-health:{row['adapter']}:{unit.get('source_id')}")
+                if (not checked or not checked.get("healthy") or checked.get("epoch") != epoch
+                        or checked.get("config_revision") != settings["config_revision"]
+                        or settings.get("funes_migration") == "pending" or settings["config"].get("version") != 2):
+                    return False
             if row["adapter"] in ("claude", "codex", "omp"):
                 if source_scope is None:
                     from .config import ConfigError, scope_fingerprints
@@ -649,7 +690,6 @@ class Store:
             repo = json.loads(repo[0])
             if repo["state"] != "public" or repo["public_until"] <= now:
                 return False
-            unit = json.loads(row["payload"])
             if not self.eligible(repo["id"], unit["event_time"], unit.get("event_end", unit["event_time"])):
                 return False
         return True

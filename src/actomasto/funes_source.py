@@ -208,8 +208,8 @@ class FunesSource:
             raise SourceError("oversized_source" if size > MAX_TURN_BYTES else "invalid_response")
         return value
 
-    def health(self, client):
-        """Metadata-only health check; never mark, enqueue, or read turn text."""
+    def _inventory(self, client):
+        """Yield validated descriptors without opening unrelated originals."""
         if self.supported.get(client) != VERSIONS.get(client):
             raise SourceError("incompatible_harness")
         cursor = None
@@ -217,33 +217,96 @@ class FunesSource:
         self.status.update(coverage="unchecked", pending_turns=0, streams={})
         while True:
             page = self.request("enumerate", harness=client, cursor=cursor, limit=64)
-            if (not isinstance(page.get("sources"), list) or page.get("coverage") not in {"current", "lagging", "unavailable"}
+            if (not isinstance(page.get("sources"), list) or len(page["sources"]) > 64
+                    or page.get("coverage") not in {"current", "lagging", "unavailable"}
                     or not _time(page.get("refreshed_at")) or not _time(page.get("lag_seconds"))):
                 raise SourceError("invalid_response")
             self.status.update(coverage=page["coverage"], refreshed_at=page["refreshed_at"], lag_seconds=page["lag_seconds"])
             if page["coverage"] != "current":
                 raise SourceError("coverage_unavailable")
             for source in page["sources"]:
-                if not isinstance(source, dict) or source.get("harness") != client:
+                if (not isinstance(source, dict) or source.get("harness") != client
+                        or not isinstance(source.get("id"), str) or not _HEX.fullmatch(source["id"])
+                        or not isinstance(source.get("revision"), str) or not _HEX.fullmatch(source["revision"])
+                        or source.get("state") not in {"present", "missing"}):
                     raise SourceError("invalid_response")
-                if source.get("state") == "missing":
-                    raise SourceError("source_missing")
-                if source.get("state") != "present" or not all(isinstance(source.get(k), str) for k in ("id", "revision")):
-                    raise SourceError("invalid_response")
-                result = self.request("turns", source_id=source["id"], revision=source["revision"], limit=1)
-                status = result.get("status")
-                if status not in _STREAM_STATUS:
-                    raise SourceError(status)
-                if type(result.get("pending_turns")) is not int or result["pending_turns"] < 0:
-                    raise SourceError("invalid_response")
-                self.status["pending_turns"] += result["pending_turns"]
-                self.status["streams"][status] = self.status["streams"].get(status, 0) + 1
+                yield source
             cursor = page.get("next_cursor")
             if cursor is None:
                 return
             if not isinstance(cursor, str) or cursor in visited:
                 raise SourceError("invalid_cursor")
             visited.add(cursor)
+
+    def health(self, client, source_ids):
+        """Recheck only supporting originals, retaining revision and coverage gates."""
+        remaining = set(source_ids)
+        if any(not isinstance(identity, str) or not _HEX.fullmatch(identity) for identity in remaining):
+            raise SourceError("invalid_source_reference")
+        for source in self._inventory(client):
+            if source["id"] not in remaining:
+                continue
+            if source["state"] == "missing":
+                raise SourceError("source_missing")
+            result = self.request("turns", source_id=source["id"], revision=source["revision"], limit=1)
+            status = result.get("status")
+            if status not in _STREAM_STATUS:
+                raise SourceError(status)
+            if type(result.get("pending_turns")) is not int or result["pending_turns"] < 0:
+                raise SourceError("invalid_response")
+            self.status["pending_turns"] += result["pending_turns"]
+            self.status["streams"][status] = self.status["streams"].get(status, 0) + 1
+            remaining.remove(source["id"])
+        if remaining:
+            raise SourceError("source_missing")
+
+    def resolve_sources(self, client, units):
+        """One-time metadata-only upgrade of retained units without source IDs."""
+        references = {}
+        for unit in units:
+            ref = unit.get("source_ref", {})
+            session = ref.get("session_id")
+            messages = ref.get("message_ids")
+            if (ref.get("client") != client or not isinstance(session, str) or not session
+                    or not isinstance(messages, list) or not messages
+                    or any(not isinstance(message, str) for message in messages)):
+                raise SourceError("invalid_source_reference")
+            references[unit["id"]] = (session, messages)
+        resolved = {}
+        for source in self._inventory(client):
+            if source["state"] == "missing":
+                continue
+            offset = 0
+            matches = {}
+            try:
+                while True:
+                    page = self.request("turns", source_id=source["id"], revision=source["revision"],
+                                        offset=offset, limit=64)
+                    if page.get("status") not in _STREAM_STATUS:
+                        raise SourceError(page.get("status"))
+                    if not isinstance(page.get("turns"), list) or len(page["turns"]) > 64:
+                        raise SourceError("invalid_response")
+                    for raw in page["turns"]:
+                        turn = self._turn(raw, client)
+                        for identity, (session, messages) in references.items():
+                            if turn["session_id"] == session and turn["message_ids"] == messages:
+                                matches[identity] = source["id"]
+                    next_offset = page.get("next_offset")
+                    if next_offset is None:
+                        break
+                    if type(next_offset) is not int or next_offset <= offset:
+                        raise SourceError("invalid_response")
+                    offset = next_offset
+            except SourceError as exc:
+                if exc.code not in _SOURCE_ERRORS:
+                    raise
+                continue
+            if resolved.keys() & matches.keys():
+                raise SourceError("ambiguous_source_reference")
+            resolved.update(matches)
+        if resolved.keys() != references.keys():
+            raise SourceError("source_missing")
+        return resolved
 
     def collect(self, client, repositories, cursor_get, cursor_set, eligible, seen=None, *,
                 source_errors=None, select_interval=None):

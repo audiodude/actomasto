@@ -189,6 +189,19 @@ Setup starts disabled. Configure blocklists and provision `ANTHROPIC_API_KEY` in
 the environment or private `~/.config/actomasto/credentials.env` before enabling.
 `notify-send` enables desktop notifications.
 
+Before model requests and after responses, draft generation rechecks only the
+original conversation sources supporting the queued evidence. An unrelated active,
+missing, or unsupported session does not block already-collected drafts. Supporting
+originals still fail closed on revision changes, missing files, unsupported schemas,
+stale inventory, or enrollment changes; collection itself retains harness-wide checks.
+Source authorization is cleared on restart and invalidated by control/configuration
+changes, independently of collection adapter health.
+
+Older queued conversations acquire source IDs automatically through exact
+session/message metadata matches. Collection times, expiry, retries, and existing
+processing markers are preserved. Missing or ambiguous matches remain blocked;
+the upgrade requests metadata only, never conversation text.
+
 ```sh
 actomasto repos
 actomasto list --limit 10

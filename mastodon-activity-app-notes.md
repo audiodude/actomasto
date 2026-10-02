@@ -158,6 +158,7 @@ Each unit expires 24 hours after first collection; retries, splitting, stop/resu
 | Visibility uncertainty after cache expiry | Affected repository paused | Affected repository stopped | Hold to original expiry |
 | Confirmed private / revoked repository | Affected repository stopped | Affected repository stopped | Discard immediately |
 | Adapter incompatibility | Affected adapter stopped | Other eligible sources allowed | Hold affected pending units without dispatch until compatible or expired |
+| Supporting original changed/missing/unsupported | Harness-wide collection remains strict | Only drafts depending on that original are blocked | Hold to original expiry; independently checked originals remain usable |
 
 `off` commits its interval and closes the dispatch gate before acknowledging success; cancels local in-flight work where possible. Requests already accepted by Anthropic may finish and incur cost, but responses arriving after stop/revocation/purge are not saved as suggestions. Record cost and keep still-eligible pending context only under its original expiry. A control-generation epoch prevents late responses from resurrecting deleted or disallowed data.
 

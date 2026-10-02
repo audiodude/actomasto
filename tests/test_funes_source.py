@@ -114,7 +114,7 @@ def test_unknown_schema_pauses_only_affected_harness_and_retries(tmp_path, funes
         source.read()
     assert 'DO_NOT_COLLECT' not in json.dumps(source.cursors)
     other = next(key for key in FILES if key != client)
-    source.api.health(other)
+    source.api.health(other, set())
     source.write(source.records)
     assert source.read()[0]['items'][0]['provenance'] == 'user_reported'
 
@@ -463,3 +463,11 @@ def test_briefing_reads_recap_turns_before_older_context(tmp_path, funes_bin, mo
     briefing_sources._conversations(settings, projects, Policy(settings), START + 86410, coverage)
     assert [item['text'] for item in projects[0]['evidence']] == texts
     assert all('newer-session' in item['source'] for item in projects[0]['evidence'])
+
+
+def test_scoped_health_requires_supporting_original_in_enrollment(tmp_path, funes_bin):
+    source = Source(tmp_path, 'omp', funes_bin)
+    unit, = source.read()
+    source.api.health('omp', {unit['source_id']})
+    with pytest.raises(SourceError, match='source_missing'):
+        source.api.health('omp', {'f' * 64})

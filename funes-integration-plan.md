@@ -136,7 +136,9 @@ Existing stream byte offsets/inodes are not portable Funes cursors. Re-enumerati
 
 ## 6. Failure and operational behavior
 
-Preserve independent harness health. An incompatible Claude source must not stop eligible Codex, OMP, or Git activity; loss of the whole Funes dependency affects all conversation sources but not Git. Recheck affected pending work at dispatch and settlement, not just collection.
+Preserve independent harness health during collection. Loss of the whole Funes dependency affects all conversation sources but not Git. At dispatch and settlement, recheck only the original source IDs supporting the queued evidence, including capability, coverage, enrollment, and revision gates. An unrelated changing, missing, or unsupported original must not block an independently checked draft in the same harness. Source authorization is bound to the current control epoch/configuration revision and cleared on process restart; collection adapter status is not generation authorization.
+
+Retained queued units without source IDs are upgraded using exact session and whole-turn message metadata matches. Persist the resolved source ID without changing collection time, expiry, attempts, or terminal markers. Missing or multiple matches fail closed; the upgrade never substitutes ranked search or requests original turn text.
 
 Status must distinguish dependency availability, protocol compatibility, per-harness compatibility, source coverage/lag, and pending incomplete turns. Coverage lag is not proof of lost data or zero activity. Keep logs and notifications content-free and retain existing notification coalescing.
 

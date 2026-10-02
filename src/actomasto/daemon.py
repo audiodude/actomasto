@@ -84,7 +84,7 @@ class Runtime:
         self.store.invalidate_adapter(client, error is None, time.time())
 
     def source_check(self, units):
-        """Refresh only affected harness health at dispatch AND settlement."""
+        """Refresh supporting originals at dispatch AND settlement."""
         clients = {unit.get('adapter') for unit in units if unit.get('kind') == 'conversation'}
         if not clients:
             return True
@@ -92,12 +92,20 @@ class Runtime:
         def cancelled():
             if not self.allowed() or self.store.settings()['epoch'] != settings['epoch']:
                 raise SourceCancelled()
+        def checked(client, healthy):
+            identities = {unit['source_id'] for unit in units
+                          if unit.get('kind') == 'conversation' and unit.get('adapter') == client
+                          and unit.get('source_id')}
+            if not self.store.set_source_health(client, identities, healthy,
+                                                settings['epoch'], settings['config_revision']):
+                raise SourceCancelled()
         source = None
         try:
             cancelled()
             source = self._source(settings, cancelled)
         except SourceError as exc:
             for client in clients:
+                checked(client, False)
                 self._source_status(client, source, exc.code)
             return False
         healthy = True
@@ -105,10 +113,22 @@ class Runtime:
             try:
                 self._scope(settings, client)
                 source.cancelled = lambda: (cancelled(), self._scope(settings, client))
-                source.health(client)
+                conversations = [unit for unit in units
+                                 if unit.get('kind') == 'conversation' and unit.get('adapter') == client]
+                retained = [unit for unit in conversations if not unit.get('source_id')]
+                if retained:
+                    resolved = source.resolve_sources(client, retained)
+                    cancelled()
+                    if not self.store.bind_sources(retained, resolved, settings['epoch']):
+                        raise SourceCancelled()
+                    for unit in retained:
+                        unit['source_id'] = resolved[unit['id']]
+                source.health(client, {unit['source_id'] for unit in conversations})
                 cancelled()
+                checked(client, True)
                 self._source_status(client, source)
             except SourceError as exc:
+                checked(client, False)
                 self._source_status(client, source, exc.code)
                 healthy = False
         return healthy

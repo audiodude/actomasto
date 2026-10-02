@@ -53,6 +53,7 @@ def test_actual_fork_collection_restart_and_git_during_outage(integrated):
     runtime.store = Store(source.repo.parent / 'state')
     assert not runtime.store.dispatch_allowed([conversation['id']], runtime.store.settings()['epoch'], NOW)
     runtime.collect()
+    assert runtime.source_check([conversation])
     assert runtime.store.dispatch_allowed([conversation['id']], runtime.store.settings()['epoch'], NOW)
     source.config['executable'] = '/missing/funes'
     cfg = copy.deepcopy(runtime.store.settings()['config'])
@@ -161,3 +162,102 @@ def test_scope_revoked_during_visibility_prevents_provider_dispatch(integrated):
         result = generator.cycle(NOW)
     assert result['count_requests'] == result['generation_requests'] == 0
     assert runtime.store.list_suggestions() == []
+
+
+@pytest.mark.parametrize('unrelated_failure', ['source_changed', 'unsupported_version', 'source_missing'])
+@pytest.mark.parametrize('retained_queue', [False, True])
+def test_unrelated_original_cannot_block_queued_draft(integrated, unrelated_failure, retained_queue):
+    runtime, source, _, config = integrated
+    runtime.collect()
+    conversation = next(unit for unit in runtime.store.pending(NOW) if unit['kind'] == 'conversation')
+    original_lifecycle = (conversation['collected_at'], conversation['expires_at'], conversation['attempt_count'])
+    if retained_queue:
+        payload = json.loads(runtime.store.db.execute(
+            'SELECT payload FROM pending_units WHERE id=?', (conversation['id'],)).fetchone()[0])
+        payload.pop('source_id', None)
+        encoded = json.dumps(payload)
+        runtime.store.db.execute('UPDATE pending_units SET payload=?,bytes=? WHERE id=?',
+                                (encoded, len(encoded.encode()), conversation['id']))
+    for unit in runtime.store.pending(NOW):
+        if unit['kind'] == 'commit':
+            runtime.store.mark(unit, 'test_git_already_processed')
+    unrelated = source.root / 'unrelated.jsonl'
+    rows = copy.deepcopy(source.records)
+    rows[1]['id'] = 'unrelated-session'
+    unrelated.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    source.refresh()
+    if unrelated_failure == 'source_missing':
+        unrelated.unlink()
+        source.refresh()
+    else:
+        if unrelated_failure == 'unsupported_version':
+            rows[1]['version'] = 999
+        unrelated.write_text(''.join(json.dumps(row) + '\n' for row in rows) + '\n')
+        if unrelated_failure == 'unsupported_version':
+            source.refresh()
+    # Collection remains strict; generation must recheck only its supporting original.
+    runtime.collect()
+    assert not runtime.store.status(NOW)['adapters']['omp']
+    assert runtime.source_check(runtime.store.pending(NOW))
+    retained, = runtime.store.pending(NOW)
+    assert (retained['collected_at'], retained['expires_at'], retained['attempt_count']) == original_lifecycle
+    assert retained['source_id'] == conversation['source_id']
+    # A later strict collection failure must not revoke an independently checked source.
+    runtime.store.invalidate_adapter('omp', False, NOW)
+    assert runtime.store.dispatch_allowed([conversation['id']], runtime.store.settings()['epoch'], NOW)
+    def provider(request):
+        if request.url.path.endswith('count_tokens'):
+            return httpx.Response(200, json={'input_tokens': 100})
+        return httpx.Response(200, json={'model': MODEL, 'stop_reason': 'end_turn',
+            'usage': {'input_tokens': 100, 'output_tokens': 20},
+            'content': [{'type': 'text', 'text': json.dumps({'candidates': [
+                {'text': 'I fixed cache invalidation.', 'evidence_ids': [conversation['items'][-1]['id']]}]})}]})
+    with httpx.Client(transport=httpx.MockTransport(provider)) as client:
+        generator = Generator(runtime.store, config, Policy(config), runtime.visibility,
+                              api_key='synthetic-key', client=client, clock=lambda: NOW,
+                              source_check=runtime.source_check)
+        result = generator.cycle(NOW)
+    assert result['generation_requests'] == result['candidates'] == 1
+    assert runtime.store.list_suggestions()[0]['text'] == 'I fixed cache invalidation.'
+
+
+@pytest.mark.parametrize('failure', ['source_changed', 'source_missing'])
+def test_supporting_original_failure_prevents_dispatch(integrated, failure):
+    runtime, source, _, config = integrated
+    runtime.collect()
+    for unit in runtime.store.pending(NOW):
+        if unit['kind'] == 'commit':
+            runtime.store.mark(unit, 'test_git_already_processed')
+    if failure == 'source_missing':
+        source.path.unlink()
+        source.refresh()
+    else:
+        source.write(source.records, suffix=b'\n')
+    with httpx.Client(transport=httpx.MockTransport(lambda request: pytest.fail('unavailable evidence transmitted'))) as client:
+        generator = Generator(runtime.store, config, Policy(config), runtime.visibility,
+                              api_key='synthetic-key', client=client, clock=lambda: NOW,
+                              source_check=runtime.source_check)
+        result = generator.cycle(NOW)
+    assert result['count_requests'] == result['generation_requests'] == 0
+    assert runtime.store.list_suggestions() == []
+    assert runtime.store.cursor('funes-status:omp')['error'] == failure
+
+
+def test_retained_reference_with_multiple_originals_fails_closed(integrated):
+    runtime, source, _, _ = integrated
+    runtime.collect()
+    conversation = next(unit for unit in runtime.store.pending(NOW) if unit['kind'] == 'conversation')
+    payload = json.loads(runtime.store.db.execute(
+        'SELECT payload FROM pending_units WHERE id=?', (conversation['id'],)).fetchone()[0])
+    payload.pop('source_id')
+    encoded = json.dumps(payload)
+    runtime.store.db.execute('UPDATE pending_units SET payload=?,bytes=? WHERE id=?',
+                            (encoded, len(encoded.encode()), conversation['id']))
+    (source.root / 'duplicate.jsonl').write_bytes(source.path.read_bytes())
+    source.refresh()
+    retained = next(unit for unit in runtime.store.pending(NOW) if unit['id'] == conversation['id'])
+    assert not runtime.source_check([retained])
+    assert runtime.store.cursor('funes-status:omp')['error'] == 'ambiguous_source_reference'
+    assert not runtime.store.dispatch_allowed([conversation['id']], runtime.store.settings()['epoch'], NOW)
+    retained = next(unit for unit in runtime.store.pending(NOW) if unit['id'] == conversation['id'])
+    assert 'source_id' not in retained

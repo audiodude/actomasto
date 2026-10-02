@@ -57,6 +57,11 @@ def opened(tmp_path):
 
 
 def accepted(store, unit, now=NOW):
+    if unit.get("kind") == "conversation":
+        unit.setdefault("source_id", "a" * 64)
+        settings = store.settings()
+        store.set_source_health(unit["adapter"], {unit["source_id"]}, True,
+                                settings["epoch"], settings["config_revision"])
     assert store.enqueue(unit, now)
     attempt = store.reserve([unit["id"]], 100, MODEL, now)
     assert attempt is not None
@@ -590,6 +595,7 @@ def test_exact_funes_migration_preserves_lifecycle_and_repairs_config_after_cras
     store.set_enabled(False, at + 1)
     store.set_enabled(True, at + 3)
     # Freeze the exact pre-upgrade schema/config as an installed v1 database.
+    store.db.execute("DELETE FROM source_cursors WHERE key LIKE 'funes-health:%'")
     settings = store.settings()
     settings["config"] = validate(legacy, legacy=True)
     settings.pop("funes_scope", None)
@@ -703,10 +709,10 @@ def test_completed_migration_retry_cannot_expand_enrollment(opened, monkeypatch)
 
 def test_scope_mutation_invalidates_final_dispatch_without_epoch_change(opened):
     store, root, config = opened
-    pending = {**activity("conversation"), "adapter": "omp", "kind": "conversation"}
+    pending = {**activity("conversation"), "adapter": "omp", "kind": "conversation", "source_id": "a" * 64}
     assert store.enqueue(pending, NOW)
-    store.invalidate_adapter("omp", True, NOW)
     epoch = store.settings()["epoch"]
+    store.set_source_health("omp", {pending["source_id"]}, True, epoch, store.settings()["config_revision"])
     assert store.dispatch_allowed([pending["id"]], epoch, NOW)
     Path(config["funes"]["scope"]).write_text(json.dumps({
         "version": 1, "roots": {"claude": [], "codex": [], "omp": [str(root / "changed")]}}))
