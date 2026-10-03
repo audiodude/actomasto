@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-02",
+  "assistance": "OpenAI Codex",
+  "stack_target": "OMP 18.5.0",
+  "base_revision": "62963056196cc72ddf36514db5855b3f9047aa22",
+  "base_choice": "Installed update-20261002-stable18412 commit preserves main 6586f59 and prior compatible dependency updates. main is an ancestor of this base.",
+  "pull": "git pull --no-rebase origin main: Already up to date.",
+  "dependency_refresh": {
+    "command": "uv lock --upgrade --refresh",
+    "resolved_packages": 20,
+    "changes": {},
+    "lockfile_unchanged": true,
+    "direct_versions": {"httpx": "0.28.1", "detect-secrets": "1.5.0", "pathspec": "0.12.1", "pytest": "8.4.2"},
+    "python": "3.13.12",
+    "installation_command": "uv sync --locked",
+    "executable": "/home/tmoney/code/vibes/actomasto/.worktrees/update-stable1850/.venv/bin/actomasto"
+  },
+  "build": {
+    "command": "uv build",
+    "result": "Successfully built source distribution and wheel",
+    "artifacts": ["dist/actomasto-0.1.0.tar.gz", "dist/actomasto-0.1.0-py3-none-any.whl"]
+  },
+  "tests": {
+    "command": "FUNES_TEST_BIN=/home/tmoney/code/forks/funes/.worktrees/update-stable1850/target/d88337d51a9c58ba8952eeeecce374dc7427b97a/dev/funes uv run --locked pytest -q",
+    "output": "430 passed in 11.70s",
+    "passed": 430,
+    "failed": 0,
+    "skipped": 0,
+    "funes_revision": "d88337d51a9c58ba8952eeeecce374dc7427b97a",
+    "funes_binary_sha256": "d191c0c510c8051d485a6ad9434fab1a3e5b4b753e2a42f74b3bf550ac707b81"
+  },
+  "cli_smoke": {
+    "isolation": "Temporary HOME and XDG_CONFIG_HOME/XDG_DATA_HOME/XDG_RUNTIME_DIR; no live state mutation",
+    "commands": ["actomasto --help", "actomasto briefing --help", "actomasto status --json", "actomasto list --json"],
+    "all_exit_codes": 0,
+    "observations": {"enabled": false, "process_running": false, "queue_count": 0, "list": []},
+    "live_read_only": {
+      "actomasto briefing validate": "Exit 0, valid true",
+      "actomasto config validate": "Exceeded 30-second shell deadline; no successful validation claimed. No matching CLI descendants remained afterward. Metadata preview traverses discovered repository refs and trees."
+    }
+  },
+  "service_cutover": {
+    "executable": "/home/tmoney/code/vibes/actomasto/.worktrees/update-stable1850/.venv/bin/actomasto",
+    "collector": "actomasto.service: replace executable in ExecStart, retain daemon argument; restart after parent cutover",
+    "daily": "actomasto-briefing-daily.service: replace executable in ExecStart, retain briefing run daily --send; do not run oneshot during upgrade",
+    "weekly": "actomasto-briefing-weekly.service: replace executable in ExecStart, retain briefing run weekly --send; do not run oneshot during upgrade",
+    "timers": "Preserve schedules; parent reloads units and restarts daily/weekly timers, not email-sending oneshots",
+    "source_exporter": "funes-source-refresh.service retains /home/tmoney/.local/lib/funes-source/refresh-actomasto; parent updates wrapper binary pin to the verified Funes revision",
+    "collector_pin": "/home/tmoney/.config/actomasto/config.toml: [funes].executable",
+    "briefing_pin": "/home/tmoney/.config/actomasto/briefings.json: funes.executable",
+    "previous_funes_executable": "/home/tmoney/.local/lib/funes-source/65611ba8f0fc486ce4bfd8ad92953b82b86b8037/funes",
+    "preserve": "Existing corpus, scope, consent, enabled state, budget, schedules and history"
+  },
+  "safety": {
+    "live_config_changed": false,
+    "service_units_changed": false,
+    "services_restarted": false,
+    "mastodon_posting": false,
+    "email_sent": false,
+    "hosted_model_requests": false,
+    "hugging_face_uploads_or_publication": false,
+    "memory_uploads_or_publication": false
+  }
+}

@@ -231,16 +231,17 @@ history, Funes data, or spending/processing records.
 - **Run tests:** `uv run --locked pytest -q`. Set `FUNES_TEST_BIN` to an absolute
   maintained-fork executable to include real Funes subprocess tests.
 
-### October 2 stable 18.4.12 dependency refresh
+### October 2 stable 18.5.0 dependency refresh
 
-The `update-20261002-stable18412` worktree starts from current main
-`6586f59`, preserving the briefing activity-coverage and draft-source-health
-fixes rather than reverting to the previous upgrade's older source lineage.
-`git pull --ff-only origin main` was already up to date. A compatible
-`uv lock --upgrade --refresh` updates only `charset-normalizer` from 3.5.1
-to 3.5.2; `uv sync --locked` prepares the worktree's `.venv` on Python 3.13.12.
-See the [verification record](verification/dependencies-20261002-stable18412.json)
-for full-suite and isolated CLI/Funes consumer evidence.
+The `update-stable1850` worktree starts from the installed upgrade commit
+`6296305`, retaining its dependency refresh and all current-main
+briefing activity-coverage and draft-source-health fixes. Pulling `origin main`
+with `git pull --no-rebase origin main` was already up to date.
+`uv lock --upgrade --refresh` resolves the existing 20 packages without
+changing compatible dependency versions; constraints remain intentional.
+`uv sync --locked` prepares the isolated `.venv` on Python 3.13.12.
+See the [verification record](verification/dependencies-20261002-stable1850.json)
+for full-suite and read-only CLI evidence.
 
 During service cutover, use this checkout's `.venv/bin/actomasto` for the
 collector and both daily/weekly briefing units; the briefing commands retain
