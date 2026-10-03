@@ -52,7 +52,21 @@
     "previous_funes_executable": "/home/tmoney/.local/lib/funes-source/65611ba8f0fc486ce4bfd8ad92953b82b86b8037/funes",
     "preserve": "Existing corpus, scope, consent, enabled state, budget, schedules and history"
   },
+  "parent_observed_release_verification_and_activation": {
+    "evidence_source": "Main agent handoff; not rerun by Actomasto worker",
+    "test_command": "FUNES_TEST_BIN=/home/tmoney/code/forks/funes/.worktrees/update-stable1850/target/d88337d51a9c58ba8952eeeecce374dc7427b97a/release/funes uv run --locked pytest -q",
+    "test_output": "430 passed in 10.96s",
+    "funes_revision": "d88337d51a9c58ba8952eeeecce374dc7427b97a",
+    "installed_funes_executable": "/home/tmoney/.local/lib/funes-source/d88337d51a9c58ba8952eeeecce374dc7427b97a/funes",
+    "release_binary_sha256": "26369174c4c620dd1153ea31583a017c41b85ef42c4c45325cc7dda7708a4a60",
+    "cutover": "Parent activated new Actomasto executable and immutable release Funes pin in collector/briefing configurations and refresh wrapper",
+    "configuration_comparison": "Only executable fields changed; corpus, scope, consent, schedules and other configuration preserved",
+    "collector": {"state": "active/running", "Result": "success", "NRestarts": 0, "journal": "ready enabled=true"},
+    "timers": "Daily and weekly timers active(waiting); no manual email-sending oneshots",
+    "runtime_smoke": ["actomasto status --json successful", "actomasto briefing validate successful", "funes-source-refresh.service successful, 707 sources"]
+  },
   "safety": {
+    "scope": "Actomasto worker preparation only; parent activation is recorded separately above",
     "live_config_changed": false,
     "service_units_changed": false,
     "services_restarted": false,

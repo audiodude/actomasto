@@ -241,7 +241,8 @@ with `git pull --no-rebase origin main` was already up to date.
 changing compatible dependency versions; constraints remain intentional.
 `uv sync --locked` prepares the isolated `.venv` on Python 3.13.12.
 See the [verification record](verification/dependencies-20261002-stable1850.json)
-for full-suite and read-only CLI evidence.
+for worker full-suite/read-only CLI evidence and separately attributed
+parent-observed release verification and activation.
 
 During service cutover, use this checkout's `.venv/bin/actomasto` for the
 collector and both daily/weekly briefing units; the briefing commands retain
@@ -250,6 +251,15 @@ uses `~/.local/lib/funes-source/refresh-actomasto`, whose pinned Funes executabl
 must stay consistent with the collector and briefing configurations. Preparing
 this environment does not rewrite units, restart services, post to Mastodon,
 send email, or upload/publish any corpus.
+
+The parent subsequently verified the final release Funes executable at revision
+`d88337d51a9c58ba8952eeeecce374dc7427b97a`: all 430 tests passed in 10.96s.
+It activated this checkout's collector and the immutable release Funes pin,
+preserving corpus, scope, consent and schedules. The collector was active/running
+with zero restarts, both briefing timers were waiting, and read-only status,
+briefing validation and the local source refresh succeeded. No manual
+email-sending oneshots were run. These activation observations are parent-reported,
+distinct from the worker's isolated preparation and dev-binary tests.
 
 [Detailed operation and architecture](mastodon-activity-app-notes.md#14-running-the-implementation)
 · [Funes integration](funes-integration-plan.md)
