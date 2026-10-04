@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-03",
+  "assistance": "OpenAI Codex",
+  "stack_target": "OMP 18.6.0",
+  "base_revision": "a9e49091f71ceac253a5912caff4fba5b508c275",
+  "base_choice": "update-stable1850 preserves current-main briefing and draft-source-health fixes plus prior custom and dependency updates",
+  "origin_main_revision": "6586f59dbddb80d4416f0bcff3d46757e8fd28a8",
+  "pull": "Fresh git fetch origin followed by git pull --no-rebase origin main: Already up to date.",
+  "dependency_refresh": {
+    "command": "uv lock --upgrade --refresh",
+    "resolved_packages": 20,
+    "lockfile_unchanged": true,
+    "lockfile_sha256": "51514609c76f90a25d7d61a0a364d8d87ea8ae0e801d46e84f1c9247a0c9783f",
+    "direct_versions": {"httpx": "0.28.1", "detect-secrets": "1.5.0", "pathspec": "0.12.1", "pytest": "8.4.2"},
+    "python": "3.13.12",
+    "installation_command": "uv sync --locked",
+    "executable": "/home/tmoney/code/vibes/actomasto/.worktrees/update-stable1860/.venv/bin/actomasto",
+    "funes_dependency_pattern": "External CLI executable configured in collector and briefing settings; not a Python project dependency"
+  },
+  "build": {
+    "command": "uv build",
+    "result": "Successfully built source distribution and wheel",
+    "artifacts": ["dist/actomasto-0.1.0.tar.gz", "dist/actomasto-0.1.0-py3-none-any.whl"]
+  },
+  "tests": {
+    "command": "FUNES_TEST_BIN=/home/tmoney/.local/lib/funes-source/3f4019407f76bea057910d2fd3651261c41e083a/funes uv run --locked pytest -q",
+    "output": "430 passed in 11.21s",
+    "passed": 430,
+    "failed": 0,
+    "skipped": 0,
+    "funes_revision": "3f4019407f76bea057910d2fd3651261c41e083a",
+    "funes_binary_sha256": "df6399f94e004e7e718e89594ee1815d21fe1a0969f596fef178942e92b8aa4e"
+  },
+  "cli_smoke": {
+    "executable": "/home/tmoney/code/vibes/actomasto/.worktrees/update-stable1860/.venv/bin/actomasto",
+    "isolation": "Temporary HOME and XDG_CONFIG_HOME/XDG_DATA_HOME/XDG_RUNTIME_DIR; no live state mutation",
+    "commands": ["actomasto --help", "actomasto briefing --help", "actomasto status --json", "actomasto list --json"],
+    "all_exit_codes": 0,
+    "observations": {"enabled": false, "process_running": false, "queue_count": 0, "list": []}
+  },
+  "service_cutover": {
+    "activation_owner": "Parent; worker has not changed live executable selection or configuration",
+    "executable": "/home/tmoney/code/vibes/actomasto/.worktrees/update-stable1860/.venv/bin/actomasto",
+    "path_cli": "No separate actomasto command found on worker PATH or in ~/.local/bin; established installation uses checkout .venv executable directly in units",
+    "collector": "actomasto.service: replace update-stable1850 executable in ExecStart with update-stable1860 executable; retain daemon argument",
+    "daily": "actomasto-briefing-daily.service: replace executable; retain briefing run daily --send; do not manually run email-sending oneshot",
+    "weekly": "actomasto-briefing-weekly.service: replace executable; retain briefing run weekly --send; do not manually run email-sending oneshot",
+    "timers": "Preserve schedules; parent reloads units and restarts timers only as required",
+    "funes_executable": "/home/tmoney/.local/lib/funes-source/3f4019407f76bea057910d2fd3651261c41e083a/funes",
+    "collector_pin": "/home/tmoney/.config/actomasto/config.toml: [funes].executable",
+    "briefing_pin": "/home/tmoney/.config/actomasto/briefings.json: funes.executable",
+    "source_exporter": "/home/tmoney/.local/lib/funes-source/refresh-actomasto: replace Funes executable pin; funes-source-refresh.service retains wrapper path",
+    "preserve": "Existing corpus, scope, consent, enabled state, budget, schedules and history"
+  },
+  "safety": {
+    "scope": "Actomasto worker preparation and verification only",
+    "live_config_changed": false,
+    "service_units_changed": false,
+    "services_restarted": false,
+    "mastodon_posting": false,
+    "email_sent": false,
+    "hosted_model_requests": false,
+    "hugging_face_uploads_or_publication": false,
+    "memory_uploads_or_publication": false
+  }
+}

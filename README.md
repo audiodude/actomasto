@@ -261,6 +261,30 @@ briefing validation and the local source refresh succeeded. No manual
 email-sending oneshots were run. These activation observations are parent-reported,
 distinct from the worker's isolated preparation and dev-binary tests.
 
+### October 3 stable 18.6.0 dependency refresh
+
+The `update-stable1860` worktree starts from `a9e4909` on
+`update-stable1850`, preserving the installed stack's custom changes and the
+current-main briefing and draft-source-health fixes. A fresh fetch followed by
+`git pull --no-rebase origin main` was already up to date.
+`uv lock --upgrade --refresh` resolves 20 packages within the existing
+compatible constraints, and `uv sync --locked` prepares an isolated Python
+3.13.12 environment. `uv build` creates the local source distribution and wheel.
+See the [upgrade verification record](verification/dependencies-20261003-stable1860.json)
+for the final Funes revision, test results, and isolated CLI smoke evidence.
+
+The prepared CLI is `.worktrees/update-stable1860/.venv/bin/actomasto`.
+There is no separate installed `actomasto` command on the user's PATH; service
+units select the checkout's executable directly. Parent integration must replace
+only executable paths in the collector and daily/weekly briefing units, and keep
+the collector, briefing configuration, and local source-refresh wrapper pinned
+to immutable Funes revision `3f4019407f76bea057910d2fd3651261c41e083a`,
+installed at `~/.local/lib/funes-source/3f4019407f76bea057910d2fd3651261c41e083a/funes`.
+Preserve corpus, scope, consent, schedules,
+enabled state and history. Preparation does not modify service units or live
+configuration, restart services, run email-sending oneshots, post to Mastodon,
+or upload/publish any corpus or release artifacts.
+
 [Detailed operation and architecture](mastodon-activity-app-notes.md#14-running-the-implementation)
 · [Funes integration](funes-integration-plan.md)
 · [Verification records](verification/)
