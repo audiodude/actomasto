@@ -285,6 +285,19 @@ enabled state and history. Preparation does not modify service units or live
 configuration, restart services, run email-sending oneshots, post to Mastodon,
 or upload/publish any corpus or release artifacts.
 
+### October 6 stable 18.7.0 dependency refresh
+
+The `update-stable1870` worktree starts from `9db0dc2` on `update-stable1860`;
+origin had no newer commits. `uv lock --upgrade --refresh` updates only
+`iniconfig` (2.3.0 → 2.3.1); `uv sync --locked` and `uv build` succeed. All 430
+tests pass against Funes `f158631a303e396440476b9f16b1c23fd9407620`, installed at
+`~/.local/lib/funes-source/f158631a303e396440476b9f16b1c23fd9407620/funes`.
+The collector and daily/weekly briefing units now run
+`.worktrees/update-stable1870/.venv/bin/actomasto`, and `config.toml`,
+`briefings.json` and the source-refresh wrapper pin that Funes build. See the
+[verification record](verification/dependencies-20261006-stable1870.json).
+Development assisted by AI (Claude).
+
 [Detailed operation and architecture](mastodon-activity-app-notes.md#14-running-the-implementation)
 · [Funes integration](funes-integration-plan.md)
 · [Verification records](verification/)
