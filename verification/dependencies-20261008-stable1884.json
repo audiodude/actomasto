@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-08",
+  "assistance": "Claude",
+  "stack_target": "OMP 18.8.4",
+  "base_revision": "c73f6c8f410d1a8d40581842ffe54613c9c76dcd",
+  "base_choice": "update-stable1870 is the installed stack; no newer commits on any origin branch",
+  "dependency_refresh": {
+    "command": "uv lock --upgrade --refresh",
+    "resolved_packages": 20,
+    "changes": {},
+    "python": "3.13.12",
+    "installation_command": "uv sync --locked",
+    "executable": "/home/tmoney/code/vibes/actomasto/.worktrees/update-stable1884/.venv/bin/actomasto"
+  },
+  "build": {
+    "command": "uv build",
+    "result": "Successfully built source distribution and wheel"
+  },
+  "tests": {
+    "command": "FUNES_TEST_BIN=/home/tmoney/.local/lib/funes-source/626a8b5ffaed2f00da5f066cdd4253310e67422f/funes uv run --locked pytest -q",
+    "passed": 430,
+    "failed": 0,
+    "funes_revision": "626a8b5ffaed2f00da5f066cdd4253310e67422f",
+    "funes_binary_sha256": "61ebbdad98ec1bbca92f6d61495a155172d655470afcde0d70ebee0525bc9af3"
+  },
+  "cli_smoke": {
+    "isolation": "Temporary HOME and XDG directories",
+    "commands": ["actomasto --help", "actomasto briefing --help", "actomasto status --json", "actomasto list --json"],
+    "all_exit_codes": 0
+  },
+  "service_cutover": {
+    "collector": "actomasto.service ExecStart -> update-stable1884 executable; restarted, active",
+    "daily": "actomasto-briefing-daily.service ExecStart -> update-stable1884 executable; timer preserved, not run manually",
+    "weekly": "actomasto-briefing-weekly.service ExecStart -> update-stable1884 executable; timer preserved, not run manually",
+    "collector_pin": "~/.config/actomasto/config.toml [funes].executable -> 626a8b5f build",
+    "briefing_pin": "~/.config/actomasto/briefings.json funes.executable -> 626a8b5f build",
+    "source_exporter": "~/.local/lib/funes-source/refresh-actomasto -> 626a8b5f build; refresh succeeded (719 sources)",
+    "backups": "~/.local/state/omp-funes-updates/stable1884/actomasto/"
+  },
+  "safety": {
+    "mastodon_posting": false,
+    "email_sent": false,
+    "hugging_face_uploads_or_publication": false,
+    "memory_uploads_or_publication": false
+  }
+}

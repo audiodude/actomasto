@@ -298,6 +298,19 @@ The collector and daily/weekly briefing units now run
 [verification record](verification/dependencies-20261006-stable1870.json).
 Development assisted by AI (Claude).
 
+### October 8 stable 18.8.4 dependency refresh
+
+The `update-stable1884` worktree starts from `c73f6c8` on `update-stable1870`;
+origin had no newer commits. `uv lock --upgrade --refresh` resolves 20 packages
+with no lock changes; `uv sync --locked` and `uv build` succeed. All 430 tests
+pass against Funes `626a8b5ffaed2f00da5f066cdd4253310e67422f`, installed at
+`~/.local/lib/funes-source/626a8b5ffaed2f00da5f066cdd4253310e67422f/funes`.
+The collector and daily/weekly briefing units now run
+`.worktrees/update-stable1884/.venv/bin/actomasto`, and `config.toml`,
+`briefings.json` and the source-refresh wrapper pin that Funes build. See the
+[verification record](verification/dependencies-20261008-stable1884.json).
+Development assisted by AI (Claude).
+
 [Detailed operation and architecture](mastodon-activity-app-notes.md#14-running-the-implementation)
 · [Funes integration](funes-integration-plan.md)
 · [Verification records](verification/)
