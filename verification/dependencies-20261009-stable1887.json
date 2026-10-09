@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-09",
+  "assistance": "Claude",
+  "stack_target": "OMP 18.8.7",
+  "base_revision": "16f0f20230e3e4fce7b4b860791e2e5b20899829",
+  "base_choice": "update-stable1884 is the installed stack; no newer commits on any origin branch",
+  "dependency_refresh": {
+    "command": "uv lock --upgrade --refresh",
+    "resolved_packages": 20,
+    "changes": {},
+    "python": "3.13.12",
+    "installation_command": "uv sync --locked",
+    "executable": "/home/tmoney/code/vibes/actomasto/.worktrees/update-stable1887/.venv/bin/actomasto"
+  },
+  "build": {
+    "command": "uv build",
+    "result": "Successfully built source distribution and wheel"
+  },
+  "tests": {
+    "command": "FUNES_TEST_BIN=/home/tmoney/.local/lib/funes-source/2c02f637ebbb18cdaff789f0a377a7cbba4428d0/funes uv run --locked pytest -q",
+    "passed": 430,
+    "failed": 0,
+    "funes_revision": "2c02f637ebbb18cdaff789f0a377a7cbba4428d0",
+    "funes_binary_sha256": "56f20ae95120884d1e74eb7ef6a40afd6e6916f6e3e8813d355fb3ae5273b2d2"
+  },
+  "cli_smoke": {
+    "isolation": "Temporary HOME and XDG directories",
+    "commands": ["actomasto --help", "actomasto briefing --help", "actomasto status --json", "actomasto list --json"],
+    "all_exit_codes": 0
+  },
+  "service_cutover": {
+    "collector": "actomasto.service ExecStart -> update-stable1887 executable; restarted, active, ready event logged",
+    "daily": "actomasto-briefing-daily.service ExecStart -> update-stable1887 executable; timer preserved, not run manually",
+    "weekly": "actomasto-briefing-weekly.service ExecStart -> update-stable1887 executable; timer preserved, not run manually",
+    "collector_pin": "~/.config/actomasto/config.toml [funes].executable -> 2c02f637 build",
+    "briefing_pin": "~/.config/actomasto/briefings.json funes.executable -> 2c02f637 build",
+    "source_exporter": "~/.local/lib/funes-source/refresh-actomasto -> 2c02f637 build; refresh succeeded (723 sources)",
+    "backups": "~/.local/state/omp-funes-updates/stable1887/actomasto/"
+  },
+  "safety": {
+    "mastodon_posting": false,
+    "email_sent": false,
+    "hugging_face_uploads_or_publication": false,
+    "memory_uploads_or_publication": false
+  }
+}
