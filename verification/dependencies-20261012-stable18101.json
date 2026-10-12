@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-12",
+  "assistance": "Claude",
+  "stack_target": "OMP 18.10.1",
+  "base_revision": "0e3fbd6060e46f1dbb8d6bcb369123a9bbfc8860",
+  "base_choice": "update-stable1891 is the installed stack; no newer commits on any origin branch",
+  "dependency_refresh": {
+    "command": "uv lock --upgrade --refresh",
+    "resolved_packages": 20,
+    "changes": {},
+    "python": "3.13.12",
+    "installation_command": "uv sync --locked",
+    "executable": "/home/tmoney/code/vibes/actomasto/.worktrees/update-stable18101/.venv/bin/actomasto"
+  },
+  "build": {
+    "command": "uv build",
+    "result": "Successfully built source distribution and wheel"
+  },
+  "tests": {
+    "command": "FUNES_TEST_BIN=/home/tmoney/.local/lib/funes-source/5a4a1bb84752fc2c45785f90b8d7c29fc172da32/funes uv run --locked pytest -q",
+    "passed": 430,
+    "failed": 0,
+    "funes_revision": "5a4a1bb84752fc2c45785f90b8d7c29fc172da32",
+    "funes_binary_sha256": "b142bd42f5f5ba0b489a253df5e996066b9eb2003d50f6ca89726afbe04a1f0a"
+  },
+  "cli_smoke": {
+    "isolation": "Temporary HOME and XDG directories",
+    "commands": ["actomasto --help", "actomasto briefing --help", "actomasto status --json", "actomasto list --json"],
+    "all_exit_codes": 0
+  },
+  "service_cutover": {
+    "collector": "actomasto.service ExecStart -> update-stable18101 executable; restarted",
+    "daily": "actomasto-briefing-daily.service ExecStart -> update-stable18101 executable; timer preserved, not run manually",
+    "weekly": "actomasto-briefing-weekly.service ExecStart -> update-stable18101 executable; timer preserved, not run manually",
+    "collector_pin": "~/.config/actomasto/config.toml [funes].executable -> 5a4a1bb8 build",
+    "briefing_pin": "~/.config/actomasto/briefings.json funes.executable -> 5a4a1bb8 build",
+    "source_exporter": "~/.local/lib/funes-source/refresh-actomasto -> 5a4a1bb8 build",
+    "backups": "~/.local/state/omp-funes-updates/stable18101/actomasto/"
+  },
+  "safety": {
+    "mastodon_posting": false,
+    "email_sent": false,
+    "hugging_face_uploads_or_publication": false,
+    "memory_uploads_or_publication": false
+  }
+}
