@@ -248,7 +248,8 @@ class Runtime:
                     last_unit = None
                     for unit in commits(repo, path, config['identity']['author_emails'],
                                         lambda start, end: self.store.eligible(repo['id'], start, end),
-                                        cancelled=cancelled, since=config.get('git', {}).get('since', '')):
+                                        cancelled=cancelled, since=config.get('git', {}).get('since', ''),
+                                        seen=self.store.seen):
                         if not self.accept(unit, repo, epoch):
                             return
                         last_unit = unit['id']

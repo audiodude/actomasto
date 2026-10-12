@@ -356,7 +356,12 @@ The collector checks for logout before every git/Funes read, and each check
 spawned two or more `loginctl` processes. That kept one core busy and stretched a
 repository pass to hours, so passes ran back to back. The runtime now rechecks
 logind at most once per second (`LOGIN_RECHECK_SECONDS`), so logout still
-suspends collection within a second. The collector and briefing units run
+suspends collection within a second. Each repository path also read every
+reachable commit object with its own `cat-file` process and re-extracted commits
+another worktree of the same repository had already settled; commit objects are
+now read in batches (`COMMIT_BATCH`) and seen commits are skipped before any
+tree, blob or patch read. An `oh-my-pi` worktree path went from 91 s to 0.6 s.
+The collector and briefing units run
 `.worktrees/fix-login-check-cache/.venv/bin/actomasto`.
 Development assisted by AI (Claude).
 

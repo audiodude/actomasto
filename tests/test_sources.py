@@ -418,8 +418,56 @@ def test_oversized_commit_is_content_free_and_terminal(repository, monkeypatch):
     assert unit["items"] == [] and unit["paths"] == []
 
 
+def test_oversized_commit_object_in_a_batch_excludes_only_itself(repository, monkeypatch):
+    large = repository.commit({"a.txt": "a\n"}, message="Long message " + "x" * 2000)
+    small = repository.commit({"b.txt": "b\n"})
+    monkeypatch.setattr(git_source, "MAX_SOURCE_BYTES", 1536)
+    units = {unit["source_ref"]["commit"]: unit for unit in repository.units()}
+    assert units[large]["exclusion_reason"] == "oversized_source"
+    assert "exclusion_reason" not in units[small]
+    assert any(item["text"] == "Implement fixture behavior" for item in units[small]["items"])
+
+
+def test_commit_headers_are_read_in_batches_across_boundaries(repository, monkeypatch):
+    mine = set()
+    for index in range(45):
+        email = "author@example.test" if index % 7 == 0 else "other@example.test"
+        oid = repository.commit({f"f{index}.txt": f"{index}\n"}, email=email)
+        if email == "author@example.test":
+            mine.add(oid)
+    monkeypatch.setattr(git_source, "COMMIT_BATCH", 20)
+    reads = []
+    original = git_source._git
+    def counting(path, *args, **kwargs):
+        if args[:1] == ("cat-file",) and args[1] in ("commit", "--batch"):
+            reads.append(args[1])
+        return original(path, *args, **kwargs)
+    monkeypatch.setattr(git_source, "_git", counting)
+    assert {unit["source_ref"]["commit"] for unit in repository.units()} == mine
+    assert reads == ["--batch"] * 3
+
+
+def test_seen_commit_skips_content_reads(repository, monkeypatch):
+    settled = repository.commit({"code.txt": "already collected elsewhere\n"})
+    fresh = repository.commit({"new.txt": "new work\n"})
+    content_reads = []
+    original = git_source._git
+    def tracking(path, *args, **kwargs):
+        if args[:1] in (("diff-tree",), ("ls-tree",)) or args[:2] == ("cat-file", "blob"):
+            content_reads.append(args)
+        return original(path, *args, **kwargs)
+    monkeypatch.setattr(git_source, "_git", tracking)
+    seen = lambda unit: unit["source_ref"]["commit"] == settled
+    units = list(git_source.collect(REPOSITORY, str(repository.path), ["author@example.test"],
+                                    lambda *args: True, seen=seen))
+    assert [unit["source_ref"]["commit"] for unit in units] == [fresh]
+    # A parent tree may still be read for the fresh child; the settled commit's
+    # own diff is never computed.
+    assert content_reads and all(fresh in args for args in content_reads if args[0] == "diff-tree")
+
+
 @pytest.mark.parametrize("code, operation", [
-    ("git_timeout", ("cat-file", "commit")),
+    ("git_timeout", ("cat-file", "--batch")),
     ("git_unavailable", ("ls-tree",)),
     ("git_read_failed", ("cat-file", "blob")),
 ])
