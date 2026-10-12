@@ -98,6 +98,22 @@ def test_logout_suspends_without_explicit_off_interval(runtime, monkeypatch):
     assert app.store.settings()['enabled'] and app.store.settings()['epoch'] == epoch
 
 
+def test_repeated_permission_checks_query_logind_at_most_once_per_interval(runtime, monkeypatch):
+    app, _ = runtime
+    app.store.set_enabled(True, time.time())
+    clock = [100.]
+    monkeypatch.setattr(time, 'monotonic', lambda: clock[0])
+    logged_in = [True]
+    calls = []
+    monkeypatch.setattr(daemon, 'active_login', lambda: calls.append(clock[0]) or logged_in[0])
+    assert all(app.allowed() for _ in range(1000))
+    assert len(calls) == 1
+    logged_in[0] = False
+    clock[0] += daemon.LOGIN_RECHECK_SECONDS
+    assert not app.allowed()
+    assert len(calls) == 2
+
+
 @pytest.mark.parametrize("boundary", ["off", "logout", "configuration"])
 def test_scan_cancels_during_discovery_without_publishing_partial_state(runtime, tmp_path, monkeypatch, boundary):
     app, config = runtime

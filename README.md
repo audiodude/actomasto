@@ -350,6 +350,16 @@ The collector and daily/weekly briefing units now run
 [verification record](verification/dependencies-20261012-stable18101.json).
 Development assisted by AI (Claude).
 
+### October 12 collector CPU fix
+
+The collector checks for logout before every git/Funes read, and each check
+spawned two or more `loginctl` processes. That kept one core busy and stretched a
+repository pass to hours, so passes ran back to back. The runtime now rechecks
+logind at most once per second (`LOGIN_RECHECK_SECONDS`), so logout still
+suspends collection within a second. The collector and briefing units run
+`.worktrees/fix-login-check-cache/.venv/bin/actomasto`.
+Development assisted by AI (Claude).
+
 [Detailed operation and architecture](mastodon-activity-app-notes.md#14-running-the-implementation)
 · [Funes integration](funes-integration-plan.md)
 · [Verification records](verification/)

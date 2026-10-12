@@ -38,6 +38,9 @@ def active_login():
     return False
 
 
+LOGIN_RECHECK_SECONDS = 1.0
+
+
 class Runtime:
     def __init__(self, store):
         self.store = store
@@ -48,11 +51,22 @@ class Runtime:
         self.stop = False
         self.generator = None
         self.config_revision = None
+        self._login = (float('-inf'), False)
+
+    def logged_in(self):
+        """Cancellation checks run per git/Funes read; spawning loginctl for each
+        one kept a core busy. Recheck at most once per LOGIN_RECHECK_SECONDS."""
+        checked_at, value = self._login
+        now = time.monotonic()
+        if now - checked_at >= LOGIN_RECHECK_SECONDS:
+            value = active_login()
+            self._login = (now, value)
+        return value
 
     def allowed(self):
         settings = self.store.settings()
         return (not self.stop and settings['enabled'] and not settings.get('budget_paused')
-                and not settings.get('clock_uncertain') and active_login())
+                and not settings.get('clock_uncertain') and self.logged_in())
 
     def visibility(self, repository_id):
         if not self.allowed():
