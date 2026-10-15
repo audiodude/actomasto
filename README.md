@@ -365,6 +365,21 @@ The collector and briefing units run
 `.worktrees/fix-login-check-cache/.venv/bin/actomasto`.
 Development assisted by AI (Claude).
 
+### October 14 stable 18.11.0 dependency refresh
+
+The `update-stable18110` worktree starts from `5ba61cf` on `main`; origin had no
+newer commits. `uv lock --upgrade --refresh` resolves 20 packages with no lock
+changes; `uv sync --locked` and `uv build` succeed. All 434 tests pass against
+Funes `3525066248b028b25339a67f1f178a88fc5d835f`, installed at
+`~/.local/lib/funes-source/3525066248b028b25339a67f1f178a88fc5d835f/funes`.
+That Funes merges upstream's anonymous Hub install id (`~/.funes/install-id`);
+run tests with `DO_NOT_TRACK=1` so they do not mint one. The collector and
+daily/weekly briefing units now run
+`.worktrees/update-stable18110/.venv/bin/actomasto`, and `config.toml`,
+`briefings.json` and the source-refresh wrapper pin that Funes build. See the
+[verification record](verification/dependencies-20261014-stable18110.json).
+Development assisted by AI (Claude).
+
 [Detailed operation and architecture](mastodon-activity-app-notes.md#14-running-the-implementation)
 · [Funes integration](funes-integration-plan.md)
 · [Verification records](verification/)

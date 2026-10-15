@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-14",
+  "assistance": "Claude",
+  "stack_target": "OMP 18.11.0",
+  "base_revision": "5ba61cf",
+  "base_choice": "main is the installed stack; no newer commits on any origin branch",
+  "dependency_refresh": {
+    "command": "uv lock --upgrade --refresh",
+    "resolved_packages": 20,
+    "changes": {},
+    "python": "3.13.12",
+    "installation_command": "uv sync --locked",
+    "executable": "/home/tmoney/code/vibes/actomasto/.worktrees/update-stable18110/.venv/bin/actomasto"
+  },
+  "build": {
+    "command": "uv build",
+    "result": "Successfully built source distribution and wheel"
+  },
+  "tests": {
+    "command": "DO_NOT_TRACK=1 FUNES_TEST_BIN=/home/tmoney/.local/lib/funes-source/3525066248b028b25339a67f1f178a88fc5d835f/funes uv run --locked pytest -q",
+    "passed": 434,
+    "failed": 0,
+    "funes_revision": "3525066248b028b25339a67f1f178a88fc5d835f",
+    "funes_binary_sha256": "66739ee2c9ebedc3e0b15228c23620a227ca4d3b49627095f435d391929153ab"
+  },
+  "cli_smoke": {
+    "isolation": "Temporary HOME and XDG directories",
+    "commands": ["actomasto --help", "actomasto briefing --help", "actomasto status --json", "actomasto list --json"],
+    "all_exit_codes": 0
+  },
+  "service_cutover": {
+    "collector": "actomasto.service ExecStart -> update-stable18110 executable; restarted",
+    "daily": "actomasto-briefing-daily.service ExecStart -> update-stable18110 executable; timer preserved, not run manually",
+    "weekly": "actomasto-briefing-weekly.service ExecStart -> update-stable18110 executable; timer preserved, not run manually",
+    "collector_pin": "~/.config/actomasto/config.toml [funes].executable -> 35250662 build",
+    "briefing_pin": "~/.config/actomasto/briefings.json funes.executable -> 35250662 build",
+    "source_exporter": "~/.local/lib/funes-source/refresh-actomasto -> 35250662 build",
+    "backups": "~/.local/state/omp-funes-updates/stable18110/actomasto/"
+  },
+  "safety": {
+    "mastodon_posting": false,
+    "email_sent": false,
+    "hugging_face_uploads_or_publication": false,
+    "memory_uploads_or_publication": false
+  }
+}
