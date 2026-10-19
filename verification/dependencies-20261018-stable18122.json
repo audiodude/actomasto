@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-18",
+  "assistance": "Claude",
+  "stack_target": "OMP 18.12.2",
+  "base_revision": "885843b",
+  "base_choice": "main is the installed stack; no newer commits on origin",
+  "dependency_refresh": {
+    "command": "uv lock --upgrade --refresh",
+    "resolved_packages": 20,
+    "changes": {
+      "certifi": "2026.7.22 -> 2026.10.18"
+    },
+    "python": "3.13.12",
+    "installation_command": "uv sync --locked",
+    "executable": "/home/tmoney/code/vibes/actomasto/.worktrees/update-stable18122/.venv/bin/actomasto"
+  },
+  "build": {
+    "command": "uv build",
+    "result": "Successfully built source distribution and wheel"
+  },
+  "tests": {
+    "command": "DO_NOT_TRACK=1 FUNES_TEST_BIN=/home/tmoney/.local/lib/funes-source/c766de9d63c5dce94fc3b0db9aa24277e63165cf/funes uv run --locked pytest -q",
+    "passed": 434,
+    "failed": 0,
+    "funes_revision": "c766de9d63c5dce94fc3b0db9aa24277e63165cf",
+    "funes_binary_sha256": "65e3ae069f8c9b2c96eb7d673bacdcc67c5aaad7c33a01821620e5cd03ed105b"
+  },
+  "cli_smoke": {
+    "isolation": "Temporary HOME and XDG directories",
+    "commands": ["actomasto --help", "actomasto briefing --help", "actomasto status --json", "actomasto list --json"],
+    "all_exit_codes": 0
+  },
+  "service_cutover": {
+    "collector": "actomasto.service ExecStart -> update-stable18122 executable; restarted",
+    "daily": "actomasto-briefing-daily.service ExecStart -> update-stable18122 executable; timer preserved, not run manually",
+    "weekly": "actomasto-briefing-weekly.service ExecStart -> update-stable18122 executable; timer preserved, not run manually",
+    "collector_pin": "~/.config/actomasto/config.toml [funes].executable -> c766de9d build",
+    "briefing_pin": "~/.config/actomasto/briefings.json funes.executable -> c766de9d build",
+    "source_exporter": "~/.local/lib/funes-source/refresh-actomasto -> c766de9d build",
+    "backups": "~/.local/state/omp-funes-updates/stable18122/actomasto/"
+  },
+  "safety": {
+    "mastodon_posting": false,
+    "email_sent": false,
+    "hugging_face_uploads_or_publication": false,
+    "memory_uploads_or_publication": false
+  }
+}
