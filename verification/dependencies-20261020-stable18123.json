@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-20",
+  "assistance": "Claude",
+  "stack_target": "OMP 18.12.3",
+  "base_revision": "2c22e9f",
+  "base_choice": "main is the installed stack; no newer commits on origin",
+  "dependency_refresh": {
+    "command": "uv lock --upgrade --refresh",
+    "resolved_packages": 20,
+    "changes": {
+      "certifi": "2026.10.18 -> 2026.10.19"
+    },
+    "python": "3.13.12",
+    "installation_command": "uv sync --locked",
+    "executable": "/home/tmoney/code/vibes/actomasto/.worktrees/update-stable18123/.venv/bin/actomasto"
+  },
+  "build": {
+    "command": "uv build",
+    "result": "Successfully built source distribution and wheel"
+  },
+  "tests": {
+    "command": "DO_NOT_TRACK=1 FUNES_TEST_BIN=/home/tmoney/.local/lib/funes-source/5172184da086fcafb8b06c53521f998ac372fc45/funes uv run --locked pytest -q",
+    "passed": 434,
+    "failed": 0,
+    "funes_revision": "5172184da086fcafb8b06c53521f998ac372fc45",
+    "funes_binary_sha256": "baedbc42cfe28d945ec4df0a99297fcd13749d1751dbb5cf824f2907571a95e4"
+  },
+  "cli_smoke": {
+    "isolation": "Temporary HOME and XDG directories",
+    "commands": [
+      "actomasto --help",
+      "actomasto briefing --help",
+      "actomasto status --json",
+      "actomasto list --json"
+    ],
+    "all_exit_codes": 0
+  },
+  "service_cutover": {
+    "collector": "actomasto.service ExecStart -> update-stable18123 executable; restarted",
+    "daily": "actomasto-briefing-daily.service ExecStart -> update-stable18123 executable; timer preserved, not run manually",
+    "weekly": "actomasto-briefing-weekly.service ExecStart -> update-stable18123 executable; timer preserved, not run manually",
+    "collector_pin": "~/.config/actomasto/config.toml [funes].executable -> 5172184d build",
+    "briefing_pin": "~/.config/actomasto/briefings.json funes.executable -> 5172184d build",
+    "source_exporter": "~/.local/lib/funes-source/refresh-actomasto -> 5172184d build",
+    "backups": "~/.local/state/omp-funes-updates/stable18123/actomasto/"
+  },
+  "safety": {
+    "mastodon_posting": false,
+    "email_sent": false,
+    "hugging_face_uploads_or_publication": false,
+    "memory_uploads_or_publication": false
+  }
+}
