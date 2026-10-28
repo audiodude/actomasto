@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-28",
+  "assistance": "Claude",
+  "stack_target": "OMP 18.13.3",
+  "base_revision": "fb3af99",
+  "base_choice": "update-stable18130 (fb3af99) is the installed 18.13.0 stack",
+  "dependency_refresh": {
+    "command": "uv lock --upgrade --refresh",
+    "resolved_packages": 20,
+    "changes": {},
+    "python": "3.13.12",
+    "installation_command": "uv sync --locked",
+    "executable": "/home/tmoney/code/vibes/actomasto/.worktrees/update-stable18133/.venv/bin/actomasto",
+    "note": "uv lock --upgrade --refresh produced no lock changes"
+  },
+  "build": {
+    "command": "uv build",
+    "result": "Successfully built source distribution and wheel"
+  },
+  "tests": {
+    "command": "DO_NOT_TRACK=1 FUNES_TEST_BIN=/home/tmoney/.local/lib/funes-source/2d2ec9c7c7981ac16f7d234def0b2e099e7e694a/funes uv run --locked pytest -q",
+    "passed": 434,
+    "failed": 0,
+    "funes_revision": "2d2ec9c7c7981ac16f7d234def0b2e099e7e694a",
+    "funes_binary_sha256": "a3b6c3e220a6f023a89874d95069deaa9012d395427158a55d945521344b1d89"
+  },
+  "cli_smoke": {
+    "isolation": "Temporary HOME and XDG directories",
+    "commands": [
+      "actomasto --help",
+      "actomasto briefing --help",
+      "actomasto status --json",
+      "actomasto list --json"
+    ],
+    "all_exit_codes": 0
+  },
+  "service_cutover": {
+    "collector": "actomasto.service ExecStart -> update-stable18133 executable; restarted",
+    "daily": "actomasto-briefing-daily.service ExecStart -> update-stable18133 executable; timer preserved, not run manually",
+    "weekly": "actomasto-briefing-weekly.service ExecStart -> update-stable18133 executable; timer preserved, not run manually",
+    "collector_pin": "~/.config/actomasto/config.toml [funes].executable -> 2d2ec9c7 build",
+    "briefing_pin": "~/.config/actomasto/briefings.json funes.executable -> 2d2ec9c7 build",
+    "source_exporter": "~/.local/lib/funes-source/refresh-actomasto -> 2d2ec9c7 build",
+    "backups": "~/.local/state/omp-funes-updates/stable18133/actomasto/"
+  },
+  "safety": {
+    "mastodon_posting": false,
+    "email_sent": false,
+    "hugging_face_uploads_or_publication": false,
+    "memory_uploads_or_publication": false
+  }
+}
