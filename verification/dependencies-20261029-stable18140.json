@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-29",
+  "assistance": "Claude",
+  "stack_target": "OMP 18.14.0",
+  "base_revision": "a93359b",
+  "base_choice": "update-stable18133 (a93359b) is the installed 18.13.3 stack",
+  "dependency_refresh": {
+    "command": "uv lock --upgrade --refresh",
+    "resolved_packages": 20,
+    "changes": {},
+    "python": "3.13.12",
+    "installation_command": "uv sync --locked",
+    "executable": "/home/tmoney/code/vibes/actomasto/.worktrees/update-stable18140/.venv/bin/actomasto",
+    "note": "uv lock --upgrade --refresh produced no lock changes"
+  },
+  "build": {
+    "command": "uv build",
+    "result": "Successfully built source distribution and wheel"
+  },
+  "tests": {
+    "command": "DO_NOT_TRACK=1 FUNES_TEST_BIN=/home/tmoney/.local/lib/funes-source/ac03aff0f074821781e92188d040474b281915ba/funes uv run --locked pytest -q",
+    "passed": 434,
+    "failed": 0,
+    "funes_revision": "ac03aff0f074821781e92188d040474b281915ba",
+    "funes_binary_sha256": "e250d068c80353fb44b60e164fb804829c4551308bae0e7550b20a8a73a812a6"
+  },
+  "cli_smoke": {
+    "isolation": "Temporary HOME and XDG directories",
+    "commands": [
+      "actomasto --help",
+      "actomasto briefing --help",
+      "actomasto status --json",
+      "actomasto list --json"
+    ],
+    "all_exit_codes": 0
+  },
+  "service_cutover": {
+    "collector": "actomasto.service ExecStart -> update-stable18140 executable; restarted, active, ready event logged",
+    "daily": "actomasto-briefing-daily.service ExecStart -> update-stable18140 executable; timer preserved, not run manually",
+    "weekly": "actomasto-briefing-weekly.service ExecStart -> update-stable18140 executable; timer preserved, not run manually",
+    "collector_pin": "~/.config/actomasto/config.toml [funes].executable -> ac03aff0 build",
+    "briefing_pin": "~/.config/actomasto/briefings.json funes.executable -> ac03aff0 build",
+    "source_exporter": "~/.local/lib/funes-source/refresh-actomasto -> ac03aff0 build; funes-source-refresh.service succeeded with 1014 sources",
+    "backups": "~/.local/state/omp-funes-updates/stable18140/actomasto/"
+  },
+  "safety": {
+    "mastodon_posting": false,
+    "email_sent": false,
+    "hugging_face_uploads_or_publication": false,
+    "memory_uploads_or_publication": false
+  }
+}
