@@ -494,6 +494,23 @@ The collector and daily/weekly briefing units now run
 [verification record](verification/dependencies-20261029-stable18140.json).
 Development assisted by AI (Claude).
 
+### November 2 stable 18.16.0 dependency refresh
+
+The `update-stable18160` worktree starts from `344b951` (`update-stable18140`,
+the installed 18.14.0 stack). `uv lock --upgrade --refresh` resolves 20
+packages and moves anyio 4.15.1 -> 4.16.0; `uv sync --locked` and `uv build`
+succeed. All 434 tests pass against Funes
+`6ef39fd010fac3bf65164514d10aa8434ac85e0d` (upstream merge, dependency refresh,
+and an OMP source normalizer that accepts OMP's per-entry `runtime` identity
+and 18.16.0 child `session_init` fields), installed at
+`~/.local/lib/funes-source/6ef39fd010fac3bf65164514d10aa8434ac85e0d/funes`. On
+the same inventory snapshot, OMP sources rejected as `unknown_content_schema`
+drop from 313 to 17 of 1039. The collector and daily/weekly briefing units now
+run `.worktrees/update-stable18160/.venv/bin/actomasto`, and `config.toml`,
+`briefings.json` and the source-refresh wrapper pin that Funes build. See the
+[verification record](verification/dependencies-20261102-stable18160.json).
+Development assisted by AI (Claude).
+
 [Detailed operation and architecture](mastodon-activity-app-notes.md#14-running-the-implementation)
 · [Funes integration](funes-integration-plan.md)
 · [Verification records](verification/)

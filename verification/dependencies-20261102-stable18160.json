@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "date": "2026-11-02",
+  "assistance": "Claude",
+  "stack_target": "OMP 18.16.0",
+  "base_revision": "344b951",
+  "base_choice": "update-stable18140 (344b951) is the installed 18.14.0 stack",
+  "dependency_refresh": {
+    "command": "uv lock --upgrade --refresh",
+    "resolved_packages": 20,
+    "changes": {
+      "anyio": "4.15.1 -> 4.16.0"
+    },
+    "python": "3.13.12",
+    "installation_command": "uv sync --locked",
+    "executable": "/home/tmoney/code/vibes/actomasto/.worktrees/update-stable18160/.venv/bin/actomasto"
+  },
+  "build": {
+    "command": "uv build",
+    "result": "Successfully built source distribution and wheel"
+  },
+  "tests": {
+    "command": "DO_NOT_TRACK=1 FUNES_TEST_BIN=/home/tmoney/.local/lib/funes-source/6ef39fd010fac3bf65164514d10aa8434ac85e0d/funes uv run --locked pytest -q",
+    "passed": 434,
+    "failed": 0,
+    "funes_revision": "6ef39fd010fac3bf65164514d10aa8434ac85e0d",
+    "funes_binary_sha256": "edcce4428575f32f704250ba6cefd08bd202175d2577a241ef64ac10ccf6877a"
+  },
+  "cli_smoke": {
+    "isolation": "Temporary HOME and XDG directories",
+    "commands": [
+      "actomasto --help",
+      "actomasto briefing --help",
+      "actomasto status --json",
+      "actomasto list --json"
+    ],
+    "all_exit_codes": 0
+  },
+  "funes_source_health": {
+    "probe": "turns(offset 0, limit 1) status per enumerated source on one inventory snapshot",
+    "omp_sources": 1039,
+    "unknown_content_schema_before": {
+      "funes_revision": "ac03aff0f074821781e92188d040474b281915ba",
+      "count": 313
+    },
+    "unknown_content_schema_after": {
+      "funes_revision": "6ef39fd010fac3bf65164514d10aa8434ac85e0d",
+      "count": 17
+    },
+    "remaining_cause": "assistant serviceTier, custom-role or synthetic message fields, not changed in this refresh"
+  },
+  "service_cutover": {
+    "collector": "actomasto.service ExecStart -> update-stable18160 executable; restarted, active, ready event logged",
+    "daily": "actomasto-briefing-daily.service ExecStart -> update-stable18160 executable; timer preserved, not run manually",
+    "weekly": "actomasto-briefing-weekly.service ExecStart -> update-stable18160 executable; timer preserved, not run manually",
+    "collector_pin": "~/.config/actomasto/config.toml [funes].executable -> 6ef39fd0 build",
+    "briefing_pin": "~/.config/actomasto/briefings.json funes.executable -> 6ef39fd0 build",
+    "source_exporter": "~/.local/lib/funes-source/refresh-actomasto -> 6ef39fd0 build; funes-source-refresh.service succeeded with 1071 sources",
+    "backups": "~/.local/state/omp-funes-updates/stable18160/actomasto/"
+  },
+  "safety": {
+    "mastodon_posting": false,
+    "email_sent": false,
+    "hugging_face_uploads_or_publication": false,
+    "memory_uploads_or_publication": false
+  }
+}
