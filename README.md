@@ -511,6 +511,24 @@ run `.worktrees/update-stable18160/.venv/bin/actomasto`, and `config.toml`,
 [verification record](verification/dependencies-20261102-stable18160.json).
 Development assisted by AI (Claude).
 
+### November 6 stable 18.18.0 dependency refresh
+
+The `update-stable18180` worktree starts from `7a078ab` (`update-stable18160`,
+the installed 18.16.0 stack). `uv lock --upgrade --refresh` resolves 20
+packages with no lock changes; `uv sync --locked` and `uv build` succeed. All
+434 tests pass against Funes `cb23e95303f32b4e522f798b44da6169b18b0feb`
+(upstream merge of huggingface/funes `31c2a0e` and a dependency refresh; OMP
+18.18.0 only adds an optional `cacheRefresh` field to `model_usage` entries,
+which the reader already accepts), installed at
+`~/.local/lib/funes-source/cb23e95303f32b4e522f798b44da6169b18b0feb/funes`. On
+the same inventory snapshot, OMP sources rejected as `unknown_content_schema`
+stay at 18 of 1063 on both the 18.16.0 and new builds. The collector and
+daily/weekly briefing units now run
+`.worktrees/update-stable18180/.venv/bin/actomasto`, and `config.toml`,
+`briefings.json` and the source-refresh wrapper pin that Funes build. See the
+[verification record](verification/dependencies-20261106-stable18180.json).
+Development assisted by AI (Claude).
+
 [Detailed operation and architecture](mastodon-activity-app-notes.md#14-running-the-implementation)
 · [Funes integration](funes-integration-plan.md)
 · [Verification records](verification/)
