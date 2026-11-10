@@ -529,6 +529,24 @@ daily/weekly briefing units now run
 [verification record](verification/dependencies-20261106-stable18180.json).
 Development assisted by AI (Claude).
 
+### November 9 stable 18.18.6 dependency refresh
+
+The `update-stable18186` worktree starts from `2419f8c` (`update-stable18180`,
+the installed 18.18.0 stack). `uv lock --upgrade --refresh` resolves 20
+packages with no lock changes; `uv sync --locked` and `uv build` succeed. All
+434 tests pass against Funes `b0854901af2a8cfb272b883d6dda8183a0ff67bb`
+(upstream merge of huggingface/funes `3cb43ed`, a reader fix accepting the
+`parentIrc` field OMP 18.18.6 writes on parent IRC steers, and a dependency
+refresh), installed at
+`~/.local/lib/funes-source/b0854901af2a8cfb272b883d6dda8183a0ff67bb/funes`. On
+the same inventory snapshot of 1077 OMP sources, the 18.18.0 and new builds
+both report 980 complete, 79 `incomplete_turn` and 18 `unknown_content_schema`.
+The collector and daily/weekly briefing units now run
+`.worktrees/update-stable18186/.venv/bin/actomasto`, and `config.toml`,
+`briefings.json` and the source-refresh wrapper pin that Funes build. See the
+[verification record](verification/dependencies-20261109-stable18186.json).
+Development assisted by AI (Claude).
+
 [Detailed operation and architecture](mastodon-activity-app-notes.md#14-running-the-implementation)
 · [Funes integration](funes-integration-plan.md)
 · [Verification records](verification/)

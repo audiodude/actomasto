@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "date": "2026-11-09",
+  "assistance": "Claude",
+  "stack_target": "OMP 18.18.6",
+  "base_revision": "2419f8c",
+  "base_choice": "update-stable18180 (2419f8c) is the installed 18.18.0 stack",
+  "dependency_refresh": {
+    "command": "uv lock --upgrade --refresh",
+    "resolved_packages": 20,
+    "changes": {},
+    "lock_changed": false,
+    "python": "3.13.12",
+    "installation_command": "uv sync --locked",
+    "executable": "/home/tmoney/code/vibes/actomasto/.worktrees/update-stable18186/.venv/bin/actomasto"
+  },
+  "build": {
+    "command": "uv build",
+    "result": "Successfully built source distribution and wheel"
+  },
+  "tests": {
+    "command": "DO_NOT_TRACK=1 FUNES_TEST_BIN=/home/tmoney/.local/lib/funes-source/b0854901af2a8cfb272b883d6dda8183a0ff67bb/funes uv run --locked pytest -q",
+    "passed": 434,
+    "failed": 0,
+    "funes_revision": "b0854901af2a8cfb272b883d6dda8183a0ff67bb",
+    "funes_binary_sha256": "443b4c13b9ede8a8bea91742f0d8dbcedb506443bb0366591cba7d301128d1df"
+  },
+  "cli_smoke": {
+    "isolation": "Temporary HOME and XDG directories",
+    "commands": [
+      "actomasto --help",
+      "actomasto briefing --help",
+      "actomasto status --json",
+      "actomasto list --json"
+    ],
+    "all_exit_codes": 0
+  },
+  "funes_source_health": {
+    "probe": "turns(offset 0, limit 1) status per enumerated source on one inventory snapshot",
+    "omp_sources": 1077,
+    "before": {
+      "funes_revision": "cb23e95303f32b4e522f798b44da6169b18b0feb",
+      "complete": 980,
+      "incomplete_turn": 79,
+      "unknown_content_schema": 18,
+      "rejected": 0
+    },
+    "after": {
+      "funes_revision": "b0854901af2a8cfb272b883d6dda8183a0ff67bb",
+      "complete": 980,
+      "incomplete_turn": 79,
+      "unknown_content_schema": 18,
+      "rejected": 0
+    },
+    "omp_18186_session_change": "user messages delivered as parent IRC steers carry parentIrc {from, body}; the Funes OMP reader now allowlists it on agent-attributed user messages"
+  },
+  "service_cutover": {
+    "collector": "actomasto.service ExecStart -> update-stable18186 executable; restarted, active, ready event logged",
+    "daily": "actomasto-briefing-daily.service ExecStart -> update-stable18186 executable; timer preserved, not run manually",
+    "weekly": "actomasto-briefing-weekly.service ExecStart -> update-stable18186 executable; timer preserved, not run manually",
+    "collector_pin": "~/.config/actomasto/config.toml [funes].executable -> b0854901 build",
+    "briefing_pin": "~/.config/actomasto/briefings.json funes.executable -> b0854901 build",
+    "source_exporter": "~/.local/lib/funes-source/refresh-actomasto -> b0854901 build; funes-source-refresh.service succeeded with 1109 sources",
+    "backups": "~/.local/state/omp-funes-updates/stable18186/actomasto/"
+  },
+  "safety": {
+    "mastodon_posting": false,
+    "email_sent": false,
+    "hugging_face_uploads_or_publication": false,
+    "memory_uploads_or_publication": false
+  }
+}
