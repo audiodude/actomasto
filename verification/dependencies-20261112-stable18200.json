@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "date": "2026-11-12",
+  "assistance": "Claude",
+  "stack_target": "OMP 18.20.0",
+  "base_revision": "02ce0dd",
+  "base_choice": "update-stable18190 (02ce0dd) is the installed 18.19.0 stack",
+  "dependency_refresh": {
+    "command": "uv lock --upgrade",
+    "resolved_packages": 20,
+    "changes": {},
+    "lock_changed": false,
+    "python": "3.13.12",
+    "installation_command": "uv sync --frozen",
+    "executable": "/home/tmoney/code/vibes/actomasto/.worktrees/update-stable18200/.venv/bin/actomasto"
+  },
+  "build": {
+    "command": "uv build",
+    "result": "Successfully built source distribution and wheel"
+  },
+  "tests": {
+    "command": "FUNES_TEST_BIN=/home/tmoney/.local/lib/funes-source/d58f34e29971d1a09f7518d68aed685f38d30d78/funes uv run --frozen pytest -q",
+    "passed": 434,
+    "failed": 0,
+    "funes_revision": "d58f34e29971d1a09f7518d68aed685f38d30d78",
+    "funes_binary_sha256": "81912b201ddacdf101c7bae3607a7a9a71d6dfcb15d761e8a891fbda49564e72"
+  },
+  "cli_smoke": {
+    "isolation": "Temporary HOME and XDG directories",
+    "commands": [
+      "actomasto --help",
+      "actomasto briefing --help",
+      "actomasto status --json",
+      "actomasto list --json"
+    ],
+    "all_exit_codes": 0
+  },
+  "funes_source_health": {
+    "probe": "turns(offset 0, limit 1) status per enumerated present OMP source on one snapshot of a copied corpus",
+    "omp_sources": 1100,
+    "before": {
+      "funes_revision": "2152045a2c317ac7281369c1a8b4c221cdf8a11a",
+      "complete": 999,
+      "incomplete_turn": 80,
+      "unknown_content_schema": 19,
+      "source_changed": 2
+    },
+    "after": {
+      "funes_revision": "d58f34e29971d1a09f7518d68aed685f38d30d78",
+      "complete": 1000,
+      "incomplete_turn": 81,
+      "unknown_content_schema": 19,
+      "source_changed": 1
+    },
+    "note": "source_changed counts live transcripts appended between the two passes (the second pass saw 1,101 sources); OMP 18.20.0 adds no persisted session fields"
+  },
+  "service_cutover": {
+    "collector": "actomasto.service ExecStart -> update-stable18200 executable; restarted, active, ready event logged",
+    "daily": "actomasto-briefing-daily.service ExecStart -> update-stable18200 executable; timer preserved, not run manually",
+    "weekly": "actomasto-briefing-weekly.service ExecStart -> update-stable18200 executable; timer preserved, not run manually",
+    "collector_pin": "~/.config/actomasto/config.toml [funes].executable -> d58f34e2 build",
+    "briefing_pin": "~/.config/actomasto/briefings.json funes.executable -> d58f34e2 build",
+    "source_exporter": "~/.local/lib/funes-source/refresh-actomasto -> d58f34e2 build; funes-source-refresh.service succeeded with 1133 sources",
+    "backups": "~/.local/state/omp-funes-updates/stable18200/actomasto/"
+  },
+  "safety": {
+    "mastodon_posting": false,
+    "email_sent": false,
+    "hugging_face_uploads_or_publication": false,
+    "memory_uploads_or_publication": false
+  }
+}
