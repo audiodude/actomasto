@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "date": "2026-11-17",
+  "assistance": "Claude",
+  "stack_target": "OMP 18.22.1",
+  "base_revision": "81e7cf2",
+  "base_choice": "update-stable18200 (81e7cf2) is the installed 18.20.0 stack",
+  "dependency_refresh": {
+    "command": "uv lock --upgrade",
+    "resolved_packages": 20,
+    "changes": {},
+    "lock_changed": false,
+    "python": "3.13.12",
+    "installation_command": "uv sync --frozen",
+    "executable": "/home/tmoney/code/vibes/actomasto/.worktrees/update-stable18221/.venv/bin/actomasto"
+  },
+  "build": {
+    "command": "uv build",
+    "result": "Successfully built source distribution and wheel"
+  },
+  "tests": {
+    "command": "FUNES_TEST_BIN=/home/tmoney/.local/lib/funes-source/b4816cb91cabf00697fa867eb0d211129aed3d65/funes uv run --frozen pytest -q",
+    "passed": 434,
+    "failed": 0,
+    "funes_revision": "b4816cb91cabf00697fa867eb0d211129aed3d65",
+    "funes_binary_sha256": "ffa267b762eddd2124aafdedd3f291dd937fb6734ad7a83432df7c2d443db5be"
+  },
+  "cli_smoke": {
+    "isolation": "Temporary HOME and XDG directories",
+    "commands": [
+      "actomasto --help",
+      "actomasto briefing --help",
+      "actomasto status --json",
+      "actomasto list --json"
+    ],
+    "all_exit_codes": 0
+  },
+  "funes_source_health": {
+    "probe": "turns(offset 0, limit 1) status per enumerated present OMP source on one snapshot of a copied corpus",
+    "omp_sources": 1210,
+    "before": {
+      "funes_revision": "d58f34e29971d1a09f7518d68aed685f38d30d78",
+      "complete": 1093,
+      "incomplete_turn": 86,
+      "unknown_content_schema": 29,
+      "source_changed": 2
+    },
+    "after": {
+      "funes_revision": "632987939af97a4c1a50e034010e5fea692d687f",
+      "complete": 1094,
+      "incomplete_turn": 86,
+      "unknown_content_schema": 29,
+      "source_changed": 1
+    },
+    "note": "source_changed counts live transcripts appended between the two passes; the Funes merge changes indexing and push, not the source reader; the health pass ran on 63298793, which differs from the pinned b4816cb9 only in the busy-lock stderr message"
+  },
+  "service_cutover": {
+    "collector": "actomasto.service ExecStart -> update-stable18221 executable; restarted, active, ready event logged",
+    "daily": "actomasto-briefing-daily.service ExecStart -> update-stable18221 executable; timer preserved, not run manually",
+    "weekly": "actomasto-briefing-weekly.service ExecStart -> update-stable18221 executable; timer preserved, not run manually",
+    "collector_pin": "~/.config/actomasto/config.toml [funes].executable -> b4816cb9 build",
+    "briefing_pin": "~/.config/actomasto/briefings.json funes.executable -> b4816cb9 build",
+    "source_exporter": "~/.local/lib/funes-source/refresh-actomasto -> b4816cb9 build; funes-source-refresh.service succeeded with 1243 sources",
+    "backups": "~/.local/state/omp-funes-updates/stable18221/actomasto/"
+  },
+  "safety": {
+    "mastodon_posting": false,
+    "email_sent": false,
+    "hugging_face_uploads_or_publication": false,
+    "memory_uploads_or_publication": false
+  }
+}
