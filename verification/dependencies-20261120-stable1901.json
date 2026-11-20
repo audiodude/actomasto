@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "date": "2026-11-20",
+  "assistance": "Claude",
+  "stack_target": "OMP 19.0.1",
+  "base_revision": "6f237e1",
+  "base_choice": "main (6f237e1) is the installed 18.22.1 stack",
+  "dependency_refresh": {
+    "command": "uv lock --upgrade",
+    "resolved_packages": 20,
+    "changes": {},
+    "lock_changed": false,
+    "python": "3.13.12",
+    "installation_command": "uv sync --frozen",
+    "executable": "/home/tmoney/code/vibes/actomasto/.worktrees/update-stable1901/.venv/bin/actomasto"
+  },
+  "build": {
+    "command": "uv build",
+    "result": "Successfully built source distribution and wheel"
+  },
+  "tests": {
+    "command": "FUNES_TEST_BIN=/home/tmoney/.local/lib/funes-source/fc3aac564e0ed94637cafe4c0183afc16a7b05ab/funes uv run --frozen pytest -q",
+    "passed": 434,
+    "failed": 0,
+    "funes_revision": "fc3aac564e0ed94637cafe4c0183afc16a7b05ab",
+    "funes_binary_sha256": "3fd600619df7a4969d1f8b135f1864cf7bb633f1253f16c072806b3fc1b69519"
+  },
+  "cli_smoke": {
+    "isolation": "Temporary HOME and XDG directories",
+    "commands": [
+      "actomasto --help",
+      "actomasto briefing --help",
+      "actomasto status --json",
+      "actomasto list --json"
+    ],
+    "all_exit_codes": 0
+  },
+  "funes_source_health": {
+    "probe": "turns(offset 0, limit 1) status per enumerated present OMP source on one snapshot of a copied corpus",
+    "omp_sources": 1284,
+    "before": {
+      "funes_revision": "b4816cb91cabf00697fa867eb0d211129aed3d65",
+      "complete": 1148,
+      "incomplete_turn": 88,
+      "unknown_content_schema": 29,
+      "missing_session_header": 11,
+      "incomplete_write": 6,
+      "source_changed": 2
+    },
+    "after": {
+      "funes_revision": "fc3aac564e0ed94637cafe4c0183afc16a7b05ab",
+      "complete": 1146,
+      "incomplete_turn": 88,
+      "unknown_content_schema": 29,
+      "missing_session_header": 11,
+      "incomplete_write": 6,
+      "source_changed": 4
+    },
+    "note": "source_changed counts live transcripts appended between the two passes; the Funes change is a dependency refresh only"
+  },
+  "service_cutover": {
+    "collector": "actomasto.service ExecStart -> update-stable1901 executable; left stopped and disabled (user paused Actomasto earlier on 2026-11-20 and chose to keep it paused)",
+    "daily": "actomasto-briefing-daily.service ExecStart -> update-stable1901 executable; timer left disabled per user pause, not run manually",
+    "weekly": "actomasto-briefing-weekly.service ExecStart -> update-stable1901 executable; timer left disabled per user pause, not run manually",
+    "collector_pin": "~/.config/actomasto/config.toml [funes].executable -> fc3aac56 build",
+    "briefing_pin": "~/.config/actomasto/briefings.json funes.executable -> fc3aac56 build",
+    "source_exporter": "~/.local/lib/funes-source/refresh-actomasto -> fc3aac56 build; one manual wrapper run succeeded with 1316 sources; funes-source-refresh.timer left disabled per user pause",
+    "backups": "~/.local/state/omp-funes-updates/stable1901/actomasto/"
+  },
+  "safety": {
+    "mastodon_posting": false,
+    "email_sent": false,
+    "hugging_face_uploads_or_publication": false,
+    "memory_uploads_or_publication": false
+  }
+}
